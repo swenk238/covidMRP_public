@@ -1,0 +1,246 @@
+
+---
+title: "Figures"
+author: "Swen Kuh"
+output: html_document
+---
+
+```{r setup, echo=F, warning=F, message=F}
+library(here)
+library(ggplot2)
+library(tidyverse)
+library(patchwork)
+
+knitr::opts_chunk$set(dev = "png",
+                      dpi = 200,
+                      # out.height = "300px",
+                      # out.width = "350px",
+                      fig.height=15/2.54,
+                      echo = FALSE, 
+                      warning = F,
+                      messages = F,
+                      cache = T)
+
+realdata_palette <- c("#0072B2", "#D55E00", "#F0E442", "#CC79A7")
+```
+
+## Real data 
+
+```{r loading results}
+load(here("results/results_list.RData"))
+
+# original estimates for model 0 - 7
+res_est_full = results_list$res_est_full
+
+# original estimates for model 0 - 5
+res_est = results_list$res_est
+
+# Experiment 1 (removing sensitivity and specificity)
+res_est_nopsamp = results_list$res_est_nopsamp
+res_noME_noFE = results_list$res_noME_noFE
+
+# Experiment 2.1 -- fixed specificity values 
+res_est_0.980spec = results_list$res_est_0.980spec
+res_est_0.990spec = results_list$res_est_0.990spec
+res_est_0.995spec = results_list$res_est_0.995spec
+res_est_1.000spec = results_list$res_est_1.000spec
+
+# Experiment 2.2 - estimating specificity 
+# fixed SENS
+res_est_fixedsens_noFE = results_list$res_est_fixedsens_noFE
+res_est_estsens_noFE = results_list$res_est_estsens_noFE
+# estimating SENS
+res_est_estsens_noFE = results_list$res_est_estsens_noFE
+# Experiment 3 - duplicates from model 0-2, and oneFE and twoFE for models 3-5 respectively
+#res_dup_list = results_list$res_dup_list
+res_est_FErm = results_list$res_est_FErm
+
+# R2D2 prior results
+res_r2_0.5_mat <- results_list$res_r2_0.5_mat
+res_r2_0.3_mat <- results_list$res_r2_0.3_mat
+res_r2_0.1_mat <- results_list$res_r2_0.1_mat
+```
+
+```{r MRP estimates from summary}
+original_data <- data.frame(model = 0:7, 
+           y = c(1.21, 1.182, 1.151, 1.016, 0.967, 0.898, 0.788, 0.668),
+           q5 = c(0.667, 0.584, 0.548, 0.357, 0.299, 0.263, 0.207, 0.153),
+           q95 = c(1.71, 1.662, 1.656, 1.579, 1.561, 1.512, 1.408, 1.318)) %>% # extracted from Excel summary sent by Marnie
+  mutate(across(y:q95, function(x)x/100),
+         type = "Original Results",
+         estimate_of = "predicted estimate")
+
+sample_predictions <- res_est_full %>%
+  mutate(model = as.numeric(model)) %>%
+  select(mean, q5, q95, model, type) %>%
+  rename(y = mean) %>%
+  rename(estimate_of = type)%>%
+  mutate(type = "Predicted on sample")
+
+real_data_plot1 <- rbind(sample_predictions, original_data)%>%
+  filter(estimate_of == "predicted estimate")%>%
+  ggplot(., aes(x = model, y = y, ymin = q5, ymax = q95, colour = type))+
+  geom_hline(yintercept=0.016, lty=2, col="gray47") +
+  geom_point(position = position_dodge(width = .2))+
+  geom_errorbar(width = .2,position = position_dodge(width = .2), alpha = .6)+
+  geom_line(position = position_dodge(width = .2))+
+  xlab("Model")+
+  ylab("Estimate")+
+  scale_colour_viridis_d(option = "mako", begin = .3,end = .8)+
+  theme_light()+
+  theme(legend.position = "bottom",
+        legend.title = element_blank())
+```
+
+```{r original}
+real_data_plot1 +
+  scale_x_continuous(breaks = pretty(res_est_full$model, n = 8)) +
+  geom_text(aes(x=0.7, y = 0.0135), label="Underestimate \n from sample \n average", col="#882255") + 
+  annotate("segment", x = 0.05, xend = 0.05, y = 0.016, yend = 0.012, colour = "#882255", arrow=arrow(type="closed", length = unit(0.05,"inches")), linetype=2) + 
+  geom_text(aes(x=3.2, y = 0.0125),  vjust = 0.1, label="Decrease after \n adding overall \n effects term", col="#E69F00") + 
+  annotate("segment", x = 3.05, xend = 3.05, y = 0.0115, yend = 0.0105, colour = "#E69F00", arrow=arrow(type="closed", length = unit(0.05,"inches")), linetype=2) + 
+  annotate("segment", x = 2.05, xend = 3.05, y = 0.0115, yend = 0.0115, colour = "#E69F00", linetype=2) + 
+    geom_text(aes(x=6.3, y = 0.009),  vjust = 0.1, label="Downward slope \n with more overall \n effects term \n and interactions", col="#E15759") + 
+  annotate("segment", x = 3.1, xend = 7.05, y = 0.011, yend = 0.0075, colour = "#E15759", arrow=arrow(type="closed", length = unit(0.05,"inches")), linetype=2)
+
+ggsave(here("code/figures/real_data_intro.png"), width = 15, height = 12, units = "cm")
+```
+
+
+
+```{r Experiment 1.2 - og_int_noME_noFE, fig.width=10, fig.height=5.5, dpi=150}
+simple_logistic_reg_data <-res_est_nopsamp %>%filter(model %in% 0:2) |> # measurement error removed for model 0-2
+  rbind(res_noME_noFE) %>%
+  select(mean, q5, q95, model, type)%>%
+  rename(y = mean) %>%
+  rename(estimate_of = type)%>%
+  mutate(type = "Logistic regression")
+
+sample_predictions %>% 
+  mutate(type = "Full Measurement model")%>%
+  rbind(simple_logistic_reg_data)%>%
+  filter(model <6) %>%
+  mutate(estimate_of = fct_recode(estimate_of, `Intercept` = "intercept", `Predicted Estimate` = "predicted estimate"),
+         estimate_of = fct_relevel(factor(estimate_of), "Predicted Estimate", "Intercept"))%>%
+  ggplot(., aes(x = model, y = y, colour = type, ymin = q5, ymax = q95))+
+  geom_hline(data = data.frame(yintercept = c(0.016, NA),
+                                estimate_of = factor(c("Predicted Estimate", "Intercept"),
+                                                     levels = c("Predicted Estimate", "Intercept"))),
+             mapping = aes(yintercept = yintercept), lty=2, col="gray47") +
+  facet_wrap(.~estimate_of, scales = "free_y")+
+  geom_point(position = position_dodge(width = .2))+
+  geom_line(position = position_dodge(width = .2))+
+  geom_errorbar(width = .2, position = position_dodge(width = .2), alpha = .6)+
+  theme_light()+
+  theme(legend.position = "bottom")+
+    labs(x = "Model", y = "Value", colour = "Sample prediction:")+
+  scale_colour_viridis_d(option = "E", begin = .8,end = .3)
+
+ggsave(here("code/figures/real_data_experiment1.png"), width = 15, height = 10, units = "cm")
+```
+
+```{r Experiment 2.1 - spec plot, warning=F, message=F, echo=F,fig.height= 5, dpi=150}
+fixed_specificity <- rbind(res_est_0.980spec, res_est_0.990spec, res_est_0.995spec, res_est_1.000spec) %>%  # with fixed specificity
+  rename(Specificity = modification)%>%
+  rename(y = mean) %>%
+  rename(estimate_of = type)%>%
+  filter(model <6, estimate_of == "predicted estimate")
+
+
+base_plot <- sample_predictions %>% 
+  select(-type)%>%
+  filter(model <6, estimate_of == "predicted estimate") %>%
+  mutate(estimate_of = fct_recode(estimate_of, `Intercept` = "intercept", `Predicted Estimate` = "predicted estimate"))%>%
+  ggplot(., aes(x = model, y = y, ymin = q5, ymax = q95))+
+  geom_point(colour = "gray47")+
+  geom_line(colour = "gray47")+
+  geom_errorbar(width = .05, colour = "gray47", alpha = .6)+
+  theme_light()+
+  theme(legend.position = "bottom")+
+    labs(x = "Model", y = "Estimate in Sample")
+
+base_plot+
+  geom_hline(yintercept=0.016, lty=2, col="gray47") +
+  geom_point(data = fixed_specificity, mapping = aes(x = model, colour = Specificity, y = y, ymin = q5, ymax = q95), position = position_dodge(width = .2))+
+  geom_line(data = fixed_specificity, mapping = aes(x = model, colour = Specificity, y = y, ymin = q5, ymax = q95), position = position_dodge(width = .2))+
+  geom_errorbar(data = fixed_specificity, mapping = aes(x = model, colour = Specificity, y = y, ymin = q5, ymax = q95), width = .2, position = position_dodge(width = .2), alpha = .6)+
+  scale_colour_viridis_d(option = "plasma", end = .5)
+
+
+ggsave(here("code/figures/real_data_experiment2_1.png"), width = 13, height = 10, units = "cm")
+ 
+```
+
+```{r Experiment 2.2 - estSpec_fixedSens}
+data_plot_2_2 <- res_est_fixedsens_noFE %>% # estimating specificity
+  rbind(res_est_estsens_noFE) %>% 
+  filter(type == "predicted estimate") %>%
+  mutate(N_xi = as.factor(N_xi),
+         type = factor(type),
+         modification = fct_recode(modification,
+                                   'Estimating sensitivity' = 'Est spec est sens',
+                                   'Fixed sensitivity' = 'Est spec fixed sens'),
+         modification = fct_relevel(modification, 'Fixed sensitivity', 'Estimating sensitivity'),
+         spec = fct_recode(factor(spec), "Spec = 0.980" = "0.98", "0.990" = "0.99", "1.000" = "1"))  
+
+base_plot +
+  geom_hline(yintercept=0.016, lty=2, col="gray47") +
+  geom_line(data = data_plot_2_2, mapping = aes(x = model, y = mean, 
+                                      ymin = q5, ymax = q95, colour = N_xi),
+            position = position_dodge(width = .2)) + 
+  geom_errorbar(data = data_plot_2_2, mapping = aes(x = model, y = mean, 
+                                      ymin = q5, ymax = q95, colour = N_xi),
+                position = position_dodge(width = .2), width = .2, alpha = .6) +
+  geom_point(data = data_plot_2_2, mapping = aes(x = model, y = mean, 
+                                      ymin = q5, ymax = q95, colour = N_xi),
+             position = position_dodge(width = .2)) +
+  facet_grid(modification ~ spec) +
+  scale_color_viridis_d(option = "inferno", begin = .8, end = .2)+
+  theme_light() + 
+  theme(legend.position="bottom",
+        legend.margin = margin(t = -5, unit = "pt")) + 
+  labs(x = "Model",
+       y = "Estimate in Sample",
+       colour = expression("Specificity sample size (" ~ m[gamma] * ")")) 
+
+ggsave(here("code/figures/real_data_experiment2_2.png"), width = 15, height = 12, units = "cm")
+```
+
+```{r Experiment 3 - og_withoutFE, out.height="6cm", out.width="10cm"}
+res_est_FErm %>%
+  filter(FEornot == "One") %>%
+  rbind(res_est_FErm %>% 
+          filter(FEornot == 'Two', model %in% 0:3) %>%
+          mutate(FEornot = recode(FEornot, 'Two' = 'One'))) -> oneFE
+ 
+# duplicate model 0 - 2 for FEornot == "No"
+res_est_FErm %>%
+  filter(FEornot == "No") %>%
+  rbind(res_est_FErm %>%
+          filter(FEornot == 'Two', model %in% 0:2) %>% 
+          mutate(FEornot = recode(FEornot, 'Two' = 'No'))) -> noFE
+
+res_est_FErm %>% 
+  filter(FEornot == 'Two') %>% 
+  rbind(oneFE, noFE) %>% 
+  filter(type == 'predicted estimate') %>% 
+  mutate(FEornot = fct_relevel(as.factor(FEornot), c('No','One','Two')),
+         model = as.factor(model)) %>%
+  arrange(FEornot) %>%
+  ggplot(aes(x=model, y=mean, col=FEornot)) + 
+  geom_rect(aes(xmin = "3", xmax = Inf, ymin = -Inf, ymax = Inf), fill="#d3d3d3", alpha=0.02, color = NA) + # blue grid
+  geom_hline(yintercept=0.016, lty=2, col="gray47") +
+  geom_line(aes(group=FEornot), position = position_dodge(width =.2)) +
+  geom_errorbar(aes(x=model,ymin=q5, ymax=q95), width=.2, alpha=0.5, position = position_dodge(width =.2)) +
+  geom_point(size=2, position = position_dodge(width =.2)) +
+ scale_color_manual( values=c("#59A14F", "#F28E2B", "#756BB1", "#E15759",  "#FDE333", "#59E01F", "#756BB1", "#54278F")  ) +
+  ylim(c(0.0025,0.02))+
+  labs(y = "MRP estimates",
+       x = "Model",
+       col = "Fixed effects present") +
+    theme_light()+
+  theme(legend.position="bottom")
+
+
+ggsave(here("code/figures/real_data_experiment3.png"), width = 15, height = 12, units = "cm")
+```

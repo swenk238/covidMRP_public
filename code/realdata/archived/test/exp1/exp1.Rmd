@@ -1,0 +1,703 @@
+---
+title: "Experiment 1 - investigating sensitivity and specificity"
+author: "Swen Kuh"
+date: "2023-03-07"
+output: pdf_document
+---
+Using the covid data, we want to test how does the inclusion of the estimation of sensitvity and specificity affect the model estimates. 
+
+We first try fixing the values one at a time and then both:
+1) Fixing sensitivity = 0.995 and giving specificity a beta 'prior'.
+2) Fixing specificity = 0.99 and giving sensitivity a beta 'prior'.
+3) Fixing both sensitivity and specificity at the observed value. 
+
+Then we also use a stronger prior on sens and spec by multiplying the beta values for sens and spec by 10, separately, and then multiply both by 10 and 100. 
+
+
+Next thing to try is to flip the observed y's (change to 0's to 1's and vice versa) and see if the trend also happens. 
+
+```{r gathering results,warning=F, message=F, echo=F}
+knitr::opts_chunk$set(dev = "png",
+                      dpi = 300,
+                      out.height = "300px",
+                      out.width = "350px",
+                      warning=F, message=F, echo=F, 
+                      cache = T)
+
+## fixing sens, spec or both 
+library(here)
+library(ggplot2)
+library(tidyverse)
+library(arm)
+
+res_wd <- 'results/experiments/exp1/'
+res_seifaInv_wd <- 'results/experiments/exp4/seifa_investigate/'
+res_noFEnoME_wd <- 'results/experiments/exp4/og_noFE_noME/'
+
+
+cbbPalette <- c("#44AA99", "#E69F00", "#88CCEE", "#882255", "#F0E442",  "#CC79A0","#D55E00")
+```
+
+```{r reading in results I, warning=F, message=F, echo=F}
+res_fixedsens = list()
+for(i in 1:7){
+  res_fixedsens[[i]] =  readRDS(file=here(paste0(res_wd,"m",i-1,"_fixedsens.RDS")))
+}
+
+res_posterior = list()
+for(i in 1:7){
+  res_posterior[[i]] =  readRDS(file=here(paste0("results/model files/m",i-1,"_postpred.RDS")))
+}
+
+res_est_sens = lapply(res_fixedsens, function(x)x$summary("p_avg1")[,c('mean', 'q5', 'q95')]) %>%
+  do.call(rbind, .) |> 
+  mutate(model = 0:6,
+         modification = "spec ~ beta(798, 4), sens = 0.95")
+
+## stronger priors
+res_est_both = lapply(res_posterior, function(x)x$summary("p_avg1")[,c('mean', 'q5', 'q95')]) %>%
+  do.call(rbind, .) |> 
+  mutate(model = 0:6,
+         modification = "spec = 0.99, sens = 0.95")
+```
+
+```{r reading in results, warning=F, message=F, echo=F}
+res_posterior_b10_sens = list()
+for(i in 1:6){
+  res_posterior_b10_sens[[i]] =  readRDS(file=here(paste0(res_wd,"m",i,"_postpred_b10_sens.RDS")))
+}
+
+res_posterior_b10_spec = list()
+for(i in 1:6){
+  res_posterior_b10_spec[[i]] =  readRDS(file=here(paste0(res_wd,"m",i,"_postpred_b10_spec.RDS")))
+}
+
+res_posterior_b10 = list()
+for(i in 1:6){
+  res_posterior_b10[[i]] =  readRDS(file=here(paste0(res_wd,"m",i,"_postpred_betavalues*10.RDS")))
+}
+
+res_posterior_b100 = list()
+for(i in 1:6){
+  res_posterior_b100[[i]] =  readRDS(file=here(paste0(res_wd,"m",i,"_postpred_betavalues*100.RDS")))
+}
+
+res_est_b10_spec = lapply(res_posterior_b10_spec, function(x)x$summary("p_avg1")[,c('mean', 'q5', 'q95')]) %>%
+  do.call(rbind, .) |> 
+  mutate(model = 1:6,
+         modification = "Modifying spec beta values: \n Spec beta values *10")
+
+res_est_b10_sens = lapply(res_posterior_b10_sens, function(x)x$summary("p_avg1")[,c('mean', 'q5', 'q95')]) %>%
+  do.call(rbind, .) |> 
+  mutate(model = 1:6,
+         modification = "Modifying sens: \n sens beta values*10")
+
+res_int_est_b10_sens = lapply(res_posterior_b10_sens, function(x)x$summary("b[1]")[,c('mean', 'q5', 'q95')]) %>%
+  do.call(rbind, .) |> 
+  mutate(model = 1:6,
+         modification = "Modifying sens: \n sens beta values*10")
+
+
+res_est_b10 = lapply(res_posterior_b10, function(x)x$summary("p_avg1")[,c('mean', 'q5', 'q95')]) %>%
+  do.call(rbind, .) |> 
+  mutate(model = 1:6,
+         modification = "Original values*10 to both")
+
+res_int_est_b10 = lapply(res_posterior_b10, function(x)x$summary("b[1]")[,c('mean', 'q5', 'q95')]) %>%
+  do.call(rbind, .) |> 
+  mutate(model = 1:6,
+         modification = "Original values*10 to both")
+
+
+res_est_b100 = lapply(res_posterior_b100, function(x)x$summary("p_avg1")[,c('mean', 'q5', 'q95')]) %>%
+  do.call(rbind, .) |> 
+  mutate(model = 1:6,
+         modification = "Original values*100 to both")
+
+total_vec <- rep(c(400,800,1200,8000),4)
+FP_vec <- c(8,16,24,160, 4,8,12,80, 2,4,6,40, rep(0,4))
+TN_vec <- total_vec - FP_vec # corresponding to specificity values of 0.98, 0.99, 0.995 and 1 
+
+
+res_fixedsens = list()
+  
+TN_vec_rep = rep(TN_vec, each=6)
+FP_vec_rep = rep(FP_vec, each=6)
+
+for(i in 1:length(TN_vec_rep)){
+  for(j in 1:6){
+    res_fixedsens[[i]] =  readRDS(file=here(paste0(res_wd,"m",j-1,"_TN", TN_vec_rep[i], "FP", FP_vec_rep[i],"fixedsens.RDS"))) 
+  }
+ }
+
+res_est_fixedsens = lapply(res_fixedsens, function(x)x$summary("p_avg1")[,c('mean', 'q5', 'q95')]) %>% 
+  do.call(rbind, .) |> 
+   mutate(model = rep(0:5,16),
+          TN = rep(TN_vec,each=6),
+          FP = rep(FP_vec,each=6),
+          modification = "Est spec fixed sens", 
+          N_xi = TN + FP,
+          spec = TN / N_xi)
+
+res_int_est_fixedsens = lapply(res_fixedsens, function(x)x$summary("b[1]")[,c('mean', 'q5', 'q95')]) %>%
+  do.call(rbind, .) |> 
+   mutate(model = rep(0:5,16),
+          TN = rep(TN_vec,each=6),
+          FP = rep(FP_vec,each=6),
+          modification = "Est spec fixed sens", 
+          N_xi = TN + FP,
+          spec = TN / N_xi)
+```
+
+```{r reading in results III no p samp, warning=F, message=F, echo=F}
+# reading in data 
+res_nopsamp = list()
+for(i in 1:7){
+  res_nopsamp[[i]] =  readRDS(file=here(paste0(res_wd,"m",i-1,"nopsamp.RDS")))
+}
+
+res_est_nopsamp = lapply(res_nopsamp, function(x)x$summary("p_avg1")[,c('mean', 'q5', 'q95')]) %>%
+  do.call(rbind, .) |> 
+  mutate(model = 0:6,
+         modification = "No")
+
+res_int_nopsamp = lapply(res_nopsamp, function(x)x$summary("b[1]")[,c('mean', 'q5', 'q95')]) %>%
+  do.call(rbind, .) |> 
+  mutate(model = 0:6,
+         modification = "No")
+
+# spec = 0.98
+res_0.980 = list()
+for(i in 1:6){
+  res_0.980[[i]] = readRDS(file=here(paste0(res_wd,"model",i-1,"spec0.98sens1.RDS")))
+}
+
+res_est_0.980spec = lapply(res_0.980, function(x)x$summary("p_avg1")[,c('mean', 'q5', 'q95')]) %>%
+  do.call(rbind,.) |> 
+  mutate(model = 0:5,
+         modification = "0.980")
+
+res_int_est_0.980spec = lapply(res_0.980, function(x)x$summary("b[1]")[,c('mean', 'q5', 'q95')]) %>%
+  do.call(rbind,.) |> 
+  mutate(model = 0:5,
+         modification = "0.980")
+
+# spec=0.99
+res_0.990 = list()
+for(i in 1:6){
+  res_0.990[[i]] = readRDS(file=here(paste0(res_wd,"model",i-1,"spec0.99sens1.RDS")))
+}
+
+res_est_0.990spec = lapply(res_0.990, function(x)x$summary("p_avg1")[,c('mean', 'q5', 'q95')]) %>%
+  do.call(rbind,.) |> 
+  mutate(model = 0:5,
+         modification = "0.990")
+
+res_int_est_0.990spec = lapply(res_0.990, function(x)x$summary("b[1]")[,c('mean', 'q5', 'q95')]) %>%
+  do.call(rbind,.) |> 
+  mutate(model = 0:5,
+         modification = "0.990")
+
+# 0.995 
+res_0.995 = list()
+for(i in 1:6){
+  res_0.995[[i]] = readRDS(file=here(paste0(res_wd,"model",i-1,"spec0.995sens1.RDS")))
+}
+
+res_est_0.995spec = lapply(res_0.995, function(x)x$summary("p_avg1")[,c('mean', 'q5', 'q95')]) %>%
+  do.call(rbind,.) |> 
+  mutate(model = 0:5,
+         modification = "0.995")
+
+res_int_est_0.995spec = lapply(res_0.995, function(x)x$summary("b[1]")[,c('mean', 'q5', 'q95')]) %>%
+  do.call(rbind,.) |> 
+  mutate(model = 0:5,
+         modification = "0.995")
+
+
+# spec=1
+res_1.000 = list()
+for(i in 1:6){
+  res_1.000[[i]] = readRDS(file=here(paste0(res_wd,"model",i-1,"spec1sens1.RDS")))
+}
+
+res_est_1.000spec = lapply(res_1.000, function(x)x$summary("p_avg1")[,c('mean', 'q5', 'q95')]) %>%
+  do.call(rbind,.)  |> 
+  mutate(model = 0:5,
+         modification = "1.000")
+
+res_int_est_1.000spec = lapply(res_1.000, function(x)x$summary("b[1]")[,c('mean', 'q5', 'q95')]) %>%
+  do.call(rbind,.)  |> 
+  mutate(model = 0:5,
+         modification = "1.000")
+
+```
+## plotting 
+```{r original}
+res_est = lapply(res_posterior, function(x)x$summary("p_avg1")[,c('mean', 'q5', 'q95')]) %>% 
+  do.call(rbind, .) |> 
+  mutate(model = 0:6,
+         modification = "Original") |> 
+  filter(model %in% 0:5)
+
+res_int_est = lapply(res_posterior, function(x)x$summary("b[1]")[,c('mean', 'q5', 'q95')]) %>% 
+  do.call(rbind, .) |> 
+  mutate(model = 0:6,
+         modification = "Original") |> 
+  filter(model %in% 0:5)
+
+p1 <- res_est |> 
+  as_tibble() |> 
+  # mutate(model = as.factor(model), 
+          # intercept=0) |> 
+  filter(model %in% 0:5) |> 
+  ggplot(aes(x=(model), y=mean, group=1)) + 
+  geom_point(size=2) +
+  geom_line() +
+  geom_text(aes(x=4.8, y = 0.0165), label="Sample average", col = "gray47") +
+  geom_errorbar(position=position_dodge(width=0.5),aes(x=model,ymin=q5, ymax=q95), width=.2, alpha=0.4) +
+  scale_color_manual( values=c("#000000",  "#F28E2B", "#E15759",  "#FDE333", "#59A14F", "#59E01F", "#756BB1", "#54278F")  ) +
+  geom_hline(yintercept=0.016, lty=2, col="gray47") +
+  labs(y = 'MRP estimate',
+       x = "Model",
+       title = "Original problem: real data") +
+  ylim(0,0.019) +
+  theme_bw() + 
+  theme(plot.title = element_text(size=15, colour="#59A14F")) 
+p1
+```
+
+```{r original_labelled}
+p1 + 
+  geom_text(aes(x=0.65, y = 0.0135), label="Underestimate \n from sample \n average", col="#CC79A0") + 
+  annotate("segment", x = 0.05, xend = 0.05, y = 0.016, yend = 0.012, colour = "#CC79A0", alpha=0.6, arrow=arrow(type="closed", length = unit(0.05,"inches"))) + 
+  geom_text(aes(x=3.05, y = 0.0125),  vjust = 0.1, label="Decrease after \n adding fixed effects", col="#D55E00") + 
+  annotate("segment", x = 3.05, xend = 3.05, y = 0.0115, yend = 0.0105, colour = "#D55E00", alpha=0.6, arrow=arrow(type="closed", length = unit(0.05,"inches"))) + 
+  annotate("segment", x = 2.05, xend = 3.05, y = 0.0115, yend = 0.0115, colour = "#D55E00", alpha=0.6, linetype=2) + 
+  geom_text(aes(x=4.7, y = 0.011),  vjust = 0.1, label="Downward slope with \n more fixed effects", col="#56B4E9") + 
+  annotate("segment", x = 3.1, xend = 5.05, y = 0.011, yend = 0.0096, colour = "#56B4E9", alpha=0.6, arrow=arrow(type="closed", length = unit(0.05,"inches")))
+  
+```
+
+
+
+```{r noME_noFE}
+res_m3a_noME <- readRDS(file=here(paste0(res_noFEnoME_wd,"res_m3a_noFE_noME.RDS")))
+res_m4a_noME <- readRDS(file=here(paste0(res_noFEnoME_wd,"res_m4a_noFE_noME.RDS")))
+res_m5a_noME <- readRDS(file=here(paste0(res_noFEnoME_wd,"res_m5a_noFE_noME.RDS")))
+
+res_noME_noFE <- lapply(list(res_m3a_noME, res_m4a_noME, res_m5a_noME), function(x)x$summary("p_avg1")[,c('mean', 'q5', 'q95')]) %>%
+  do.call(rbind, .) |> 
+  mutate(model = 3:5,
+         modification = "No")
+
+res_int_noME_noFE <- lapply(list(res_m3a_noME, res_m4a_noME, res_m5a_noME), function(x)x$summary("b[1]")[,c('mean', 'q5', 'q95')]) %>%
+  do.call(rbind, .) |> 
+  mutate(model = 3:5,
+         modification = "No")
+
+```
+
+```{r og_noME_noFE, warning=F, messages=F}
+shade_alp = 0.2 
+
+res_est |> 
+  as_tibble() |> 
+  mutate(type = "predicted estimate") |>
+  rbind(res_noME_noFE |> mutate(type="predicted estimate")) |> 
+  rbind(res_est_nopsamp |> filter(model %in% 0:2) |> mutate(type="predicted estimate")) |> 
+  filter(model %in% 0:5) |> 
+  mutate(model = as.factor(model),
+         modification = fct_recode(modification, "Yes" = "Original")) -> dat_plot 
+
+dat_plot |> 
+  ggplot(aes(x=model, y=mean, group=modification, col=modification)) + 
+  geom_hline(yintercept=0.016, lty=2, col="gray47") +
+  geom_text(aes(x="4", y = 0.017), label="Sample average", col = "gray47") +
+  geom_text(aes(x="4", y = 0.011), label="Original estimates", col = "lightgray") +
+  geom_errorbar(data = dat_plot |> filter(modification == 'Yes'), aes(ymin=q5, ymax=q95), width=.2, alpha=shade_alp) +
+   geom_errorbar(data = dat_plot |> filter(modification == 'No'), aes(x=model,ymin=q5, ymax=q95), width=.2, alpha=1) +
+   geom_line(data = dat_plot |> filter(modification == 'Yes'), alpha=shade_alp) +
+  geom_line(data = dat_plot |> filter(modification == 'No'), alpha=1) +
+   geom_point(data = dat_plot |> filter(modification == 'Yes'), aes(y = mean), size=2, alpha=shade_alp) +
+  geom_point(data = dat_plot |> filter(modification == 'No'), aes(y = mean), size=2, alpha=1) +
+  scale_color_manual(values=c("#F28E2B",  "darkgray", "#E15759",  "#FDE333", "#59A14F", "#59E01F", "#756BB1", "#54278F")) +
+   scale_fill_manual(values = '#e5f5f9',  
+                     guide = guide_legend(override.aes = list(alpha = 1))) +
+  theme_bw() + 
+  theme(legend.position="bottom",
+        plot.title = element_text(size=15, colour="#59A14F")) +
+  labs(y = 'MRP estimate',
+       x = "Model",
+       title = "Original problem: real data",
+       col = "Measurement error and \n fixed effects included") 
+```
+
+```{r og_int_noME_noFE, fig.height=6, fig.width=4.5}
+ann_text <- data.frame(model=c("4","4"), mean = c(0.017,0.011), col=c("gray47","lightgray"),
+                       type = factor('predicted estimate',levels = c('predicted estimate', 'intercept')), modification = "Yes")
+
+res_est |> 
+  as_tibble() |> 
+  mutate(type = "predicted estimate") |>
+  rbind(res_noME_noFE |> mutate(type="predicted estimate")) |> 
+  rbind(res_est_nopsamp |> filter(model %in% 0:2) |> mutate(type="predicted estimate")) |>
+  rbind(res_int_noME_noFE |> mutate(type="intercept", across(mean:q95, ~(.x)))) |> 
+  rbind(res_int_nopsamp |> filter(model %in% 0:2) |> mutate(type="intercept", across(mean:q95, ~(.x)))) |>
+  rbind(res_int_est |> mutate(type="intercept", across(mean:q95, ~(.x)))) |> 
+  filter(model %in% 0:5) |> 
+  mutate(model = as.factor(model),
+         modification = fct_recode(modification, "Yes" = "Original"),
+         type = fct_relevel(type, 'predicted estimate', 'intercept')) |> 
+  mutate(col_int = interaction(modification,type),
+         pixel_int = ifelse(modification == "Yes", 0.5, 1),
+         pixel_int = as.factor(pixel_int)) -> dat_plot 
+
+shade_alp = 0.2
+dat_plot |> 
+  mutate(col_int = fct_recode(col_int, "No" = "No.predicted estimate", "Yes" = "Yes.predicted estimate", 
+                              "No - intercept" = "No.intercept", "Yes - intercept" = "Yes.intercept")) |> 
+  ggplot(aes(x=model, y=mean, group=modification, color=col_int)) + 
+  facet_grid(vars(type), scale="free_y") +
+  geom_hline(data = filter(dat_plot, type == "predicted estimate"), aes(yintercept=0.016), lty=2, col="gray47") +  
+  geom_text(data = ann_text,label = c("Sample average","Original estimates"), show.legend=FALSE, col=c("gray47", "darkgray")) +
+   geom_errorbar(aes(ymin=q5, ymax=q95, alpha = pixel_int), width=.2) +
+   geom_point(aes(alpha=pixel_int)) +
+  geom_line(aes(alpha=pixel_int)) +
+  scale_color_manual(values=c("#E69F00", "darkgray", "#882255", "darkgray", "#E15759",  "#FDE333", "#59A14F", "#59E01F", "#756BB1", "#54278F")) + #,  guide = guide_legend(override.aes = list(alpha = c(0.5, 1)))
+   theme_bw() + 
+  theme(legend.position="bottom",
+        plot.title = element_text(size=15, colour="#59A14F")) +
+  labs(y = "",
+       x = "Model",
+       title = "Original problem: real data",
+       col = "Measurement error and \n fixed effects included") +
+  guides(alpha = "none",
+         color = guide_legend(nrow = 2)) +
+  scale_alpha_discrete(range = c(0.4, 1))
+```
+
+```{r no_p_samp_est, fig.height=6, fig.width=4.5}
+ann_text <- data.frame(model=5.5, mean = 0.015, col="gray47",
+                       type = factor('predicted estimate',levels = c('predicted estimate', 'intercept')), modification = "Yes")
+
+res_est_nopsamp |> 
+  as_tibble() |> 
+  mutate(model = as.factor(model),
+         type = "predicted estimate") |>
+  rbind(res_est |> mutate(type="predicted estimate")) |> 
+  rbind(res_int_est |> mutate(type="intercept", across(mean:q95, ~(.x))), res_int_nopsamp |> mutate(type="intercept", across(mean:q95, ~(.x)))) |> 
+  filter(model %in% 0:5) |> 
+  mutate(modification = fct_recode(modification, "Yes" = "Original"),
+         type = fct_relevel(type, 'predicted estimate', 'intercept')) -> dat_plot2
+
+dat_plot2 |> 
+  ggplot(aes(x=model, y=mean, group=modification, col=modification)) + 
+  facet_grid(vars(type), scale="free_y") +
+  geom_hline(data = filter(dat_plot2, type == "predicted estimate"), aes(yintercept=0.016), lty=2, col="gray47") +       
+  geom_errorbar(aes(x=model,ymin=q5, ymax=q95, alpha = modification), width=.2, alpha=0.4) +
+  geom_point(size=2, aes(alpha = modification)) +
+  geom_line(aes(alpha = modification)) +
+  geom_text(data = ann_text,label = "Sample average", show.legend=FALSE, col="gray47") +
+  scale_color_manual( values=c("#F28E2B", "darkgray", "#000000", "#E15759",  "#FDE333", "#59A14F", "#59E01F", "#756BB1", "#54278F")  ) +
+  labs(y = "",
+       x = "Model",
+       title = "Original data",
+       col = "Measurement error included") +
+  theme_bw() +
+  theme(legend.position="bottom",
+        plot.title = element_text(size=15, colour="#59A14F")) +
+  scale_alpha_manual(values=c(1,shade_alp), guide = guide_legend()) +
+  guides(alpha = "none")
+```
+
+```{r no_p_samp_int}
+res_int_nopsamp |> 
+  as_tibble() |> 
+  mutate(model = as.factor(model),
+         modification = "No") |>
+  rbind(res_int_est) |> 
+  filter(model %in% 0:5) |> 
+  mutate(modification = fct_recode(modification, "Yes" = "Original values: \n spec ~ beta(798 = TN+1, 4 = FP+1), \n sens ~ beta(98 = TP+1, 6 = FN+1)")) |> 
+  ggplot(aes(x=model, y=invlogit(mean), group=modification, col=modification)) + 
+  geom_errorbar(aes(x=model,ymin=invlogit(q5), ymax=invlogit(q95)), width=.2, alpha=0.4) +
+  geom_point(size=2) +
+  geom_line() +
+  scale_color_manual( values=c("#F28E2B", "#000000", "#E15759",  "#FDE333", "#59A14F", "#59E01F", "#756BB1", "#54278F")  ) +
+  labs(y = 'MRP estimate',
+       x = "Model",
+       title = "Original data",
+       col = "Measurement error included") +
+  theme_bw() +
+  theme(legend.position="bottom",
+        plot.title = element_text(size=15, colour="#59A14F"))
+
+```
+
+Further investigating fixing specificity at different values: 
+
+```{r spec plot, warning=F, message=F, echo=F, fig.height=8, fig.width=6}
+res_est |> 
+  filter(model %in% 0:5) %>%
+rbind(res_est_0.980spec, res_est_0.990spec, res_est_0.995spec, res_est_1.000spec, .) |>
+  as_tibble() |> 
+  mutate(modification = as_factor(modification),
+        type = "predicted estimate") -> res_est_all 
+  
+res_est_all |> 
+  ggplot(aes(x=model, y=mean, col=modification)) + 
+  geom_text(aes(x=4.5, y = 0.0085), label="Original estimates", col = "lightgray") +
+  geom_errorbar(aes(ymin=q5, ymax=q95), width=.2, alpha=0.4) +
+  geom_hline(yintercept=0.016, lty=2, col="darkgrey") +
+  geom_point(size=2, aes(alpha=modification)) +
+  geom_line(aes(alpha=modification)) + 
+  labs(y = 'MRP estimate',
+       x = "Model",
+       title = "Original data: fixing specificity at different values",
+       col = "Specified specificity values") +
+  theme_bw() +
+  theme(legend.position="bottom",
+        plot.title = element_text(size=15, colour="#59A14F")) +
+  scale_colour_manual(values = c(cbbPalette[1:4], "darkgray")) +
+  scale_alpha_manual(values=c(rep(1,4), 0.4)) +
+   guides(alpha = "none")
+
+
+# intercept 
+res_int_est |> 
+  filter(model %in% 0:5) %>%
+rbind(res_int_est_0.980spec, res_int_est_0.990spec, res_int_est_0.995spec, res_int_est_1.000spec, .) |>
+  as_tibble() |> 
+  mutate(modification = as_factor(modification),
+         type = "intercept") |> 
+  rbind(res_est_all) |> 
+  mutate(type = fct_relevel(type, 'predicted estimate', 'intercept')) |> 
+  ggplot(aes(x=model, y=mean, col=modification)) + 
+  facet_grid(vars(type), scale="free_y") +
+  geom_errorbar(aes(ymin=q5, ymax=q95), width=.2, alpha=0.4) +
+  geom_point(size=2, aes(alpha=modification)) +
+  geom_line(aes(alpha=modification)) + 
+  labs(y = '',
+       x = "Model",
+       title = "Original data: fixing specificity at different values",
+       col = "Specified specificity values") +
+  theme_bw() +
+  theme(legend.position="bottom",
+        plot.title = element_text(size=15, colour="#59A14F")) +
+  scale_colour_manual(values = c(cbbPalette[1:4], "darkgray")) +
+  scale_alpha_manual(values=c(rep(1,4), 0.4)) +
+   guides(alpha = "none")
+```
+
+```{r estSpec_fixedSens, fig.height=5}
+ann_text <- data.frame(spec=c("Spec = 0.980"), model = "4", mean = c(0.017), col=c("gray47"), modification = "Original") |> mutate(spec = fct_relevel("Spec = 0.980"))
+
+res_est_fixedsens |> 
+  mutate(spec = fct_recode(as.factor(spec), 
+                            "0.980" = "0.98",
+                            "0.990" = "0.99",
+                            "1.000" = "1")) |> 
+  rbind(res_est |> mutate(spec = "0.980", TN = 797, FP = 3, N_xi = 800)) |> 
+  rbind(res_est |> mutate(spec = "0.990", TN = 797, FP = 3, N_xi = 800)) |> 
+  rbind(res_est |> mutate(spec = "0.995", TN = 797, FP = 3, N_xi = 800)) |> 
+  rbind(res_est |> mutate(spec = "1.000", TN = 797, FP = 3, N_xi = 800)) |> 
+  mutate(N_xi = as.factor(N_xi),
+         model = as.factor(model),
+         spec = as.factor(spec),
+         spec = fct_recode(spec, "Spec = 0.980" = "0.980")) -> dat_plot1 
+
+dat_plot1 |> 
+  mutate(spec = fct_relevel(spec, "Spec = 0.980", "0.990", "0.995", "1.000")) |> 
+  filter(modification != 'Original') |> 
+ggplot(aes(x=model, y=mean, group=modification, col=N_xi)) +
+  facet_grid(cols=vars(spec)) +
+  geom_point(data = dat_plot1 |> filter(modification == "Original"), size=2, alpha=shade_alp, col = "darkgray") + 
+  geom_line(data = dat_plot1 |> filter(modification == "Original"), aes(group=TN), col = "darkgray", alpha=0.5) + 
+  geom_errorbar(data = dat_plot1 |> filter(modification == "Original"), aes(ymin=q5, ymax=q95), width=.2, alpha = 0.5, col = "darkgray") +
+  geom_hline(yintercept=0.016, lty=2, col="gray47") +
+  geom_line(aes(group=TN)) + 
+  geom_errorbar(aes(ymin=q5, ymax=q95), width=.2, alpha=shade_alp) +
+  geom_point(size=2) + 
+  geom_text(data = ann_text, aes(x="4", y = 0.017), label="Sample average", col = "gray47", size=3.2) +
+  scale_color_manual(values=cbbPalette) +
+  theme_bw() + 
+  ylim(0, 0.02) +
+  theme(legend.position="bottom",
+        text = element_text(size=15),
+        plot.title = element_text(size=15, colour="#59A14F")) +
+  labs(y = 'MRP estimate',
+       x = "Model",
+       title = "Original problem: real data",
+       colour = expression(N[xi])) 
+
+```
+
+```{r plotting, warning=F, message=F, echo=F}
+rbind(res_est, res_est_b10_spec, res_est_b10, res_est_b100,
+      res_est_b10_sens, res_est_sens,
+      res_est_0.990spec, res_est_both) |> 
+  as_tibble() |> 
+  mutate(modification = as_factor(modification),
+         model = as.factor(model)) |> 
+  ggplot(aes(x=model, y=mean, col=modification)) + 
+  geom_point(position=position_dodge(width=0.5), size=2) +
+  geom_line(position=position_dodge(width=0.5)) + 
+  geom_errorbar(position=position_dodge(width=0.5),aes(x=model,ymin=q5, ymax=q95), width=.2, alpha=0.4) +
+  scale_color_manual( values=c("#000000",  "#F28E2B", "#E15759",  "#FDE333", "#59A14F", "#59E01F", "#756BB1", "#54278F")  ) +
+  geom_hline(yintercept=0.016, lty=2, col="darkgrey") +
+  labs(y = 'MRP estimate',
+       x = "Model",
+       title = "Original problem: real data",
+       colour = "Modification") +
+  ylim(0,0.017) + theme_bw()
+```
+
+## Plotting intercept
+
+```{r intercept results, echo=F, eval=F}
+rbind(res_int_est, res_int_est_b10, res_int_est_b10_sens) |> 
+  as_tibble() |> 
+  mutate(modification = as_factor(modification)) |> 
+  ggplot(aes(x=model, y=mean, col=modification)) + 
+  geom_point(position=position_dodge(width=0.5), size=2) +
+  geom_line(position=position_dodge(width=0.5)) + 
+  geom_errorbar(position=position_dodge(width=0.5),aes(x=model,ymin=q5, ymax=q95), width=.2, alpha=0.4) +
+  scale_color_manual( values=c("#000000", "#E15759",  "#59A14F", "#54278F",  "#FDE333", "#756BB1")) +
+  ylab('Intercept') +
+  ggtitle("Real data: Intercept estimate, b[1] (Original scale)") + theme_bw()
+
+rbind(res_int_est, res_int_est_b10, res_int_est_b10_sens) |> 
+  as_tibble() |> 
+  mutate(modification = as_factor(modification), 
+         mean_invlogit = invlogit(mean)) |> 
+  ggplot(aes(x=model, y=mean_invlogit, col=modification)) + 
+  geom_point(position=position_dodge(width=0.5), size=2) +
+  geom_line(position=position_dodge(width=0.5)) + 
+  scale_color_manual( values=c("#000000", "#E15759",  "#59A14F", "#54278F",  "#FDE333", "#756BB1"))  +
+  geom_hline(yintercept=0.016, lty=2, col="darkgrey") +
+  ylab('Intercept') +
+  ggtitle("Real data: Intercept estimate, b[1] (invlogit scale)") + theme_bw()
+
+```
+
+The priors look like this: 
+
+```{r priors, warning=F, message=F, echo=F}
+set.seed(1234)
+par(mfrow=c(3,2))
+
+hist(rbeta(10000, 798, 4), main="Specificity", xlim=c(0.98,1))
+abline(v = mean(rbeta(10000, 798, 4)), lwd=3, lty=2, col="purple")
+
+hist(rbeta(10000, 98, 6), main="Sensitivity", xlim=c(0.85,1))
+abline(v = mean(rbeta(10000,  98, 6)), lwd=3, lty=2, col="blue")
+
+hist(rbeta(10000, 7971, 31), xlim=c(0.98,1))
+abline(v = mean(rbeta(10000,  7971, 31)), lwd=3, lty=2, col="purple")
+
+hist(rbeta(10000, 971, 51), xlim=c(0.85,1))
+abline(v = mean(rbeta(10000,  971, 51)), lwd=3, lty=2, col="blue")
+
+hist(rbeta(10000, 79701, 301), xlim=c(0.98,1))
+abline(v = mean(rbeta(10000, 79701, 301)), lwd=3, lty=2, col="purple")
+
+hist(rbeta(10000, 9701, 501), xlim=c(0.85,1))
+abline(v = mean(rbeta(10000, 9701, 501)), lwd=3, lty=2, col="blue")
+
+
+summary(rbeta(10000, 798, 4))
+summary(rbeta(10000, 7971, 31))
+summary(rbeta(10000, 79701, 301))
+
+summary(rbeta(10000, 98, 6))
+summary(rbeta(10000, 971, 51))
+summary(rbeta(10000, 9701, 501))
+```
+
+## no p_sample (not estimating sens and spec)
+```{r}
+# reading in data
+res_nopsamp = list()
+for(i in 1:6){
+  res_nopsamp[[i]] = readRDS(file=here(paste0(res_wd,"m",i,"nopsamp.RDS")))
+}
+
+res_est_nopsamp = lapply(res_nopsamp, function(x)x$summary("p_avg1")[,c('mean', 'q5', 'q95')]) %>%
+  do.call(rbind, .) |> 
+  mutate(model = 1:6) |> 
+  rename(mrp_mean = mean, mrp_q5 = q5, mrp_q95 = q95)
+
+# sample_predictions and intercept
+func_summ <- function(x){
+  x$summary(c("p", "b[1]"))[,c('variable', 'mean', 'q5', 'q95')]}
+
+pop_pred <- lapply(res_nopsamp, func_summ)
+
+pop_list = lapply(pop_pred, function(x) {x |> 
+    mutate(var = gsub("(p)(\\[[0-9]*\\])", "\\1", variable)) |>
+    dplyr::select(-variable) |> 
+    group_by(var) |> 
+    summarise_all(mean)})  
+
+tab_nop_samp = do.call(rbind,pop_list) |> 
+  as_tibble() |> 
+  mutate(model = rep(1:6, each=2)) |> 
+  pivot_wider(names_from = var, values_from = c(mean, q5, q95)) |> 
+  rename(int_mean = `mean_b[1]`, int_q5 = `q5_b[1]`, int_q95 = `q95_b[1]`,
+         indPred_mean = mean_p, indPred_q5 = q5_p, indPred_q95 = q95_p) |> 
+  right_join(res_est_nopsamp, ., by='model') 
+
+
+t1 = tab_nop_samp |> 
+  pivot_longer(c(indPred_q5, mrp_q5, int_q5), names_to = c("type", "quantile"),
+               names_sep = "_",
+               values_to = "q5") |>
+  dplyr::select(model,type,q5) 
+
+t2 = tab_nop_samp |> 
+  pivot_longer(c(indPred_q95, mrp_q95, int_q95), names_to = c("type", "quantile"),
+               names_sep = "_",
+               values_to = "q95") |> 
+  dplyr::select(model,type,q95) 
+
+t3 = left_join(t1,t2, by=c('model', "type"))
+
+tab_nop_samp |> 
+  pivot_longer(c(indPred_mean, mrp_mean, int_mean), names_to = c("type","measure"),
+               names_sep = "_",
+               values_to = "mean") %>%
+  dplyr::select(-measure) |> 
+  left_join(t3, by=c('model', "type")) |> 
+  dplyr::select(model, type:q95) |> 
+  filter(type != "int") |> 
+  ggplot(aes(x=model, y = mean, col=type)) + 
+  geom_point(position=position_dodge(width=0.5), size=2) +
+  geom_line(position=position_dodge(width=0.5)) +
+  geom_errorbar(position=position_dodge(width=0.5),aes(x=model,ymin=q5, ymax=q95), width=.2, alpha=0.4) +
+  scale_color_manual(values=c("#F28E21", "#59A14F", "#59E01F", "#756BB1", "#54278F")   ) +
+  geom_hline(yintercept=0.016, lty=2, col="darkgrey") +
+  theme_minimal() +
+  ylab('Estimate') +
+  ggtitle("Real data: no sensitivity and specificity") 
+
+## intercept only ### 
+tab_nop_samp |> 
+  pivot_longer(c(indPred_mean, mrp_mean, int_mean), names_to = c("type","measure"),
+               names_sep = "_",
+               values_to = "mean") %>%
+  dplyr::select(-measure) |> 
+  left_join(t3, by=c('model', "type")) |> 
+  dplyr::select(model, type:q95) |> 
+  filter(type == "int") |> 
+  ggplot(aes(x=model, y = mean, col=type)) + 
+  geom_point(position=position_dodge(width=0.5), size=2) +
+  geom_line(position=position_dodge(width=0.5)) +
+  geom_errorbar(position=position_dodge(width=0.5),aes(x=model,ymin=q5, ymax=q95), width=.2, alpha=0.4) +
+  scale_color_manual(values=c("#000000", "#59A14F", "#59E01F", "#756BB1", "#54278F")   ) +
+  theme_minimal() +
+  ylab('Intercept estimate') +
+  ggtitle("Real data: no sensitivity and specificity") +
+  ylim(-5, -2)
+
+```
+

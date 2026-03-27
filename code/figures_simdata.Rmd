@@ -1,0 +1,473 @@
+---
+title: "figures simdata"
+output: html_document
+---
+
+```{r setup, echo=F, warning=F, message=F}
+library(here)
+library(ggplot2)
+library(tidyverse)
+library(patchwork)
+
+knitr::opts_chunk$set(dev = "png",
+                      dpi = 200,
+                      # out.height = "300px",
+                      # out.width = "350px",
+                      fig.height=15/2.54,
+                      echo = FALSE, 
+                      warning = F,
+                      messages = F,
+                      cache = T)
+
+cbbPalette <- c("#44AA99", "#E69F00", "#88CCEE", "#882255")
+
+```
+
+
+```{r loading results}
+# loading simulation results
+load(here("results/results_sim_list.RData"))
+
+# population data
+popn_data_sim1_list <- results_sim_list$popn_data_sim1_list
+popn_data_TNFP <- results_sim_list$popn_data_TNFP
+
+# Sim 1.1 - brm and glm results for 100 iterations
+sim1_mat <- results_sim_list$sim1_mat
+sim1_y_popn <- results_sim_list$sim1_y_popn
+
+# Sim 1.2 - with covariates
+res_sim1_cov_mat <- results_sim_list$res_sim1_cov_mat
+res_sae_sim1_cov_mat <- results_sim_list$res_sae_sim1_cov_mat
+
+# Sim 2.1 - fixed specificity values
+res_sim2_nes_fixedspec_all <- results_sim_list$res_sim2_nes_fixedspec_all
+
+# Sim 2.2 - estimating specificity
+res_sim2_es_mat <- results_sim_list$res_sim2_es_mat
+
+# Sim 3 - FE results
+res_sim3_FE_mat <- results_sim_list$res_sim3_FE_mat 
+```
+
+# Sim 1
+## Sim 1.1 intercept only
+```{r median-model-estimates, echo=F}
+# mean of population y values
+mean_y_popn = sapply(sim1_y_popn, function(x)mean(x)) %>% 
+  as_tibble() %>% 
+  mutate(p_config = as.character(c("0.001", "0.01", "0.1", "0.2"))) %>% 
+  rename(mean_y_popn = value)
+
+# for plotting
+p_config_list = c("0.001", "0.01", "0.1", "0.2")
+
+# cleaning up the data 
+sim1_mat_plot = sim1_mat %>%
+  mutate(p_config = as.character(p_config)) %>% 
+  left_join(mean_y_popn, by='p_config') %>% 
+  mutate(across(.cols=c(brm_pred_mean_q5:glm_pred_mean, post_intercept:brm_prior_pred_mean_q95),  # calculating bias
+                .fns = function(x){x - mean_y_popn}, 
+                .names="{.col}_bias" ),
+         p_config = as.factor(p_config),
+         samp_size = as.factor(samp_size)) %>%
+  relocate(mean_y_popn, .after=p_config) # moving the newly created column 
+
+# median of all 
+sim1_mat_plot %>%
+  select(brm_pred_mean_q50_bias, glm_pred_mean_bias, p_config, samp_size)%>%
+  pivot_longer(cols = c("brm_pred_mean_q50_bias","glm_pred_mean_bias"), names_to = "type_of_estimate", values_to = "iteration_med_bias")%>%
+  mutate(type_of_estimate = fct_recode(type_of_estimate, brms = "brm_pred_mean_q50_bias", glm = "glm_pred_mean_bias"))%>%
+  ggplot(.,aes(x = samp_size, y = iteration_med_bias, colour = type_of_estimate)) +
+  geom_hline(yintercept = 0)+
+  geom_boxplot()+
+    facet_wrap(~p_config, 
+             labeller = labeller(p_config = c("0.001" = "p = 0.001",
+                                              "0.01" = "p = 0.01", 
+                                              "0.1" = "p = 0.1",
+                                              "0.2" = "p = 0.2")), ncol = 4,
+             scales = "free_y")+
+  scale_colour_manual(values=cbbPalette[c(2,1)], label = c('brms', 'glm')) +
+  labs(x="Sample size", y="Bias", colour = 'Type of model') +
+  theme_light()+
+  theme(legend.position="bottom")
+
+ggsave(here("code/figures/median-model-estimates-1.png"), width = 21, height = 8, units = "cm")
+
+# median of all 
+sim1_mat_plot %>%
+  select(brm_pred_mean_q50_bias, glm_pred_mean_bias, p_config, samp_size)%>%
+  pivot_longer(cols = c("brm_pred_mean_q50_bias","glm_pred_mean_bias"), names_to = "type_of_estimate", values_to = "iteration_med_bias")%>%
+  mutate(type_of_estimate = fct_recode(type_of_estimate, brms = "brm_pred_mean_q50_bias", glm = "glm_pred_mean_bias"))%>%
+  ggplot(.,aes(x = samp_size, y = iteration_med_bias, colour = type_of_estimate)) +
+  geom_hline(yintercept = 0) +
+  geom_jitter(alpha = .5) +
+  facet_wrap(~p_config, 
+             labeller = labeller(p_config = c("0.001" = "p = 0.001",
+                                              "0.01" = "p = 0.01", 
+                                              "0.1" = "p = 0.1",
+                                              "0.2" = "p = 0.2")), ncol = 4,
+             scales = "free_y")+
+  scale_colour_manual(values=cbbPalette[c(2,1)], label = c('brms', 'glm')) +
+  labs(x="Sample size", y="Bias", colour = 'Type of model') +
+  theme_light() + 
+  theme(legend.position="bottom")
+
+ggsave(here("code/figures/appendix_median-model-estimates-1.png"), width = 21, height = 8, units = "cm")
+
+```
+
+
+## Sim 1.2 with covariates
+```{r with_cov_mean_int_bias, echo=F}
+p_set <- 0.01
+samp_size <- c(400, 4000)
+n_level <- c(4,10,20,40)
+beta1_set <- c(0.3, 0)
+
+error_brm_mat <- res_sim1_cov_mat |>
+  mutate(beta1_set = factor(beta1_set),
+         samp_size = fct_recode(factor(samp_size), 'Sample size = 400' = '400'),
+         samp_size = fct_relevel(factor(samp_size), c('Sample size = 400', '4000')),
+         n_level = fct_recode(factor(n_level), 'Number of covariate levels = 4' = '4'),
+         n_level = fct_relevel(n_level,c('Number of covariate levels = 4', '10', '20', '40')),
+         model = as.factor(model),
+         across(.cols=c(brm_pred_mean_q5:brm_pred_mean_q95, glm0_pred_mean:glm5_pred_mean),  # calculating bias
+                .fns = function(x){x - pi_popndata_truth}, 
+                .names="{.col}_pi_popn_bias" )) 
+
+error_brm_mat %>%
+  filter(n_level == "20", beta1_set == "0.3") %>%
+  mutate(n_level = recode(n_level, "20" = "Number of covariate levels = 20"))%>%
+  rename("Predicted estimate" = brm_pred_mean_q50_pi_popn_bias, 
+         "Intercept" = post_intercept_bias) %>%
+  pivot_longer(cols=c(`Predicted estimate`, `Intercept`),
+               names_to = "est_type", values_to = "estimates") %>%
+  mutate(est_type = fct_relevel(est_type, c('Predicted estimate', 'Intercept'))) %>%
+  ggplot(aes(x=model, y=estimates, col=est_type)) + 
+  scale_colour_manual(values=cbbPalette[c(2,4)]) +
+  facet_grid(.~samp_size, scales = "free_y", switch="y") +
+  geom_hline(yintercept=0, lty=2, col="darkgrey") +
+  geom_boxplot() + 
+  theme_light() +
+  labs(y = "Estimate - Truth",
+       x = paste0("Model"), 
+       colour = "Estimate type") +
+  theme(strip.placement = "outside", 
+        legend.position="bottom", 
+        text = element_text(size=15))
+
+
+ggsave(here("code/figures/with_cov_mean_int_bias-1.png"), width = 21, height = 15, units = "cm")
+```
+
+```{r with_cov_sae_estimates}
+res_sae_sim1_cov_mat %>%  
+  filter(grepl("^r_x", variable)) %>% 
+  mutate(variable = str_replace_all(variable, 
+                                    c("\\[" = "_",
+                                      ",Intercept\\]" = "",
+                                      "^r_" = "")),
+         variable = as.factor(variable)) %>% 
+  pivot_wider(id_cols = c(samp_size, n_level, beta1_set, model, iter), names_from = variable, values_from = brm_pred_mean_q50) %>% 
+  mutate(across(everything(), ~replace_na(., 0))) %>% 
+  rowwise() %>%
+  mutate(ranef_sum = sum(c_across(matches("^x[1-5]_")))) %>%
+  relocate(ranef_sum, .before = 'x1_1') -> sum_of_random_effects
+  
+sum_of_random_effects %>% 
+  select(samp_size:ranef_sum) %>% 
+  mutate(beta1_set = factor(beta1_set),
+         samp_size = fct_recode(factor(samp_size), 'Sample size = 400' = '400'),
+         samp_size = fct_relevel(factor(samp_size), c('Sample size = 400', '4000')),
+         n_level = fct_recode(factor(n_level), 'Number of covariate levels = 4' = '4'),
+         n_level = fct_relevel(n_level,c('Number of covariate levels = 4', '10', '20', '40')),
+         model = as.factor(model))  %>%
+  filter(n_level == "20", beta1_set == "0.3") %>%
+  mutate(n_level = recode(n_level, "20" = "Number of covariate levels = 20")) %>%
+  ggplot(aes(x=model, y=ranef_sum)) + 
+  scale_colour_manual(values=cbbPalette[c(2,4)]) +
+  facet_grid(.~samp_size, scales = "free_y") +
+  geom_hline(yintercept=0, lty=2, col="darkgrey") +
+  geom_boxplot()
+
+```
+
+
+```{r with_cov_mean_intercept_boxplot_i1, fig.height=10, fig.width=7, dpi=120}
+plot_bias_violin <- function(data, beta_value, nlvl) {
+  data %>%
+    filter(beta1_set == beta_value, n_level != nlvl) %>%
+    rename("Predicted estimate" = brm_pred_mean_q50_pi_popn_bias, 
+           "Intercept" = post_intercept_bias) %>%
+    pivot_longer(cols = c(`Predicted estimate`, `Intercept`), 
+                 names_to = "est_type", values_to = "estimates") %>%
+    mutate(est_type = fct_relevel(est_type, c("Predicted estimate", "Intercept"))) %>%
+    ggplot(aes(x = model, y = estimates, col = est_type)) + 
+    geom_hline(yintercept = 0, lty = 2, col = "darkgrey") +
+    geom_boxplot() + 
+    #geom_violin(scale = "width", alpha = 0.95) +
+    facet_grid(n_level ~ samp_size) +
+    scale_colour_manual(values=cbbPalette[c(2,4)]) +
+    labs(y = "Estimate - Truth",
+         x = paste0("Model"), 
+         colour = "Estimate type") +
+    theme_light() +
+    theme(legend.position = "bottom", 
+          text = element_text(size = 15)) 
+}
+
+# Generate plots for both beta values
+plot_bias_violin(error_brm_mat, "0.3", "20")
+plot_bias_violin(error_brm_mat, "0", "") 
+
+```
+
+
+# Sim 2
+## Sim 2.1 fixing spec
+```{r noEstSpec_n20, dpi=120}
+beta1_set <- 0.3
+
+# specifying sens and spec 
+sens <- 1 
+spec_vec <- c('0.980', '0.990', '0.995', '1.000')
+facet_label <- c("Truth is Covid Prevalence" = "hat(pi) - pi", "Truth is Test Prevalence" = "hat(pi) - Pr(y*'*' == 1)")
+
+
+# cleaning results
+res_sim2_nes_mat <- res_sim2_nes_fixedspec_all %>%
+  rename(est_int_invlogit = est_int) %>% 
+  mutate(samp_size = fct_recode(factor(samp_size), 'Sample size = 400' = '400'),
+         samp_size = fct_relevel(factor(samp_size), c('Sample size = 400', '4000')),
+         n_level = fct_recode(factor(n_level), 'Number of covariate levels = 4' = '4'),
+         n_level = fct_relevel(n_level,c('Number of covariate levels = 4', '10', '20', '40')),
+         spec = as.character(spec),
+         model = as.factor(model),
+         est_int_invlogit_bias = est_int_invlogit - 0.01,
+         est_int_logit_bias = arm::logit(est_int_invlogit) - arm::logit(0.01),
+         across(.cols=c(pred_mean_q50:pred_mean_q95),  # calculating bias
+                .fns = function(x){x - pi_popndata_truth}, 
+                .names="{.col}_pi_popn_bias")) %>% 
+  unite(col="TN_FP", TN, FP, sep="_") %>%
+  mutate(TN_FP = as.factor(TN_FP)) %>% 
+  rename("Truth is Covid Prevalence" = pred_mean_q50_pi_popn_bias,  
+         "intercept" = est_int_logit_bias) %>%
+  mutate("Truth is Test Prevalence" = pred_mean_q50 - p_spec_popndata_truth)%>%
+  pivot_longer(cols=c(`Truth is Covid Prevalence`,`Truth is Test Prevalence`, 
+                      `intercept`), names_to = 
+                 "est_type", values_to = "estimates") %>%
+  mutate(est_type = fct_relevel(est_type, c('predicted estimate', 'intercept')))
+
+res_sim2_nes_mat %>% 
+filter(n_level == "20", est_type != "intercept")  %>%
+  ggplot(aes(x=spec, y=estimates,colour=model)) +
+  facet_grid(est_type~samp_size, scales="free_y", switch = "y",  labeller = labeller(est_type =as_labeller(facet_label, default = label_parsed))) + 
+  geom_hline(yintercept=0, lty=2, col="darkgrey") +
+  geom_boxplot()+
+  labs(y = "Estimate - Truth",
+       x = paste0("Specificity value"), 
+       colour = "Model") +
+  scale_colour_viridis_d(end = .8) +
+  guides(colour = guide_legend(nrow = 1)) +
+  theme_light() +
+  theme(strip.placement = "outside") +
+  theme(legend.position="bottom", 
+        text = element_text(size=15),
+        axis.title.y =element_blank())
+
+ggsave(here("code/figures/noEstSpec_n20_pi_y-1.png"), width = 21, height = 15, units = "cm")
+```
+
+```{r appendix_noEstSpec_true_n20, dpi=120}
+
+res_sim2_nes_mat %>% 
+  mutate(n_level = extract_numeric(n_level))%>%
+filter(est_type != "intercept", est_type == "Truth is Covid Prevalence")  %>%
+  ggplot(aes(x=spec, y=estimates,colour=model)) +
+  facet_grid(n_level~samp_size, scales="free_y") + 
+  geom_hline(yintercept=0, lty=2, col="darkgrey") +
+  geom_boxplot()+
+  labs(y = expression(hat(pi) - pi),
+       x = paste0("Specificity value"), 
+       colour = "Model") +
+  scale_colour_viridis_d(end = .8) +
+  guides(colour = guide_legend(nrow = 1)) +
+  theme_light() +
+  theme(legend.position="bottom", 
+        text = element_text(size=15))
+
+ggsave(here("code/figures/appendix_trueCovid_noEstSpec_n20_pi_y-1.png"), width = 21, height = 21, units = "cm")
+```
+
+
+
+```{r appendix_noEstSpec_n20, dpi=120}
+
+res_sim2_nes_mat %>% 
+  mutate(n_level = extract_numeric(n_level))%>%
+filter(est_type != "intercept", est_type == "Truth is Test Prevalence")  %>%
+  ggplot(aes(x=spec, y=estimates,colour=model)) +
+  facet_grid(n_level~samp_size, scales="free_y") + 
+  geom_hline(yintercept=0, lty=2, col="darkgrey") +
+  geom_boxplot()+
+  labs(y = expression(hat(pi) - Pr(y*'*' == 1)),
+       x = paste0("Specificity value"), 
+       colour = "Model") +
+  scale_colour_viridis_d(end = .8) +
+  guides(colour = guide_legend(nrow = 1)) +
+  theme_light() +
+  theme(legend.position="bottom", 
+        text = element_text(size=15))
+
+ggsave(here("code/figures/appendix_trueTest_noEstSpec_n20_pi_y-1.png"), width = 21, height = 21, units = "cm")
+```
+
+## Sim 2.2 estimating spec
+```{r estSpec_n20_pi_y, out.height="6cm", out.width="8cm"}
+# mean of y* for different specificity
+mean_y_popn_vec = apply(popn_data_TNFP %>%dplyr::select(y_spec0.980:y_spec1.000), 2, function(x)mean(x))
+
+res_sim2_es_mat %>%
+  rename(est_int_invlogit = est_int) |>
+  mutate(samp_size = fct_recode(factor(samp_size), 'Sample size = 400' = '400'),
+         samp_size = fct_relevel(factor(samp_size), c('Sample size = 400', '4000')),
+         n_level = fct_recode(factor(n_level), 'Number of covariate levels = 4' = '4'),
+         n_level = fct_relevel(n_level,c('Number of covariate levels = 4', '10', '20', '40')),
+         spec_N = TN + FP,
+         across(.cols=c(pred_mean_q50:pred_mean_q95),  # calculating bias against pi
+                .fns = function(x){x - pi_popndata_truth}, 
+                .names="{.col}_pi_popn_bias" ),   
+         across(.cols=c(psamp_mean_q50:psamp_mean_q95),  # calculating bias against pi
+                .fns = function(x){x - p_spec_popndata_truth}, 
+                .names="{.col}_p_y_popn_bias" ),
+         est_int_invlogit_bias = est_int_invlogit - 0.01,
+         est_int_logit_bias = arm::logit(est_int_invlogit) - arm::logit(0.01)) %>% 
+  unite(col="TN_FP", TN, FP, sep="_") |>
+  mutate(TN_FP = as.factor(TN_FP),
+         model=as.factor(model)) -> plot_dat
+
+plot_dat %>% 
+  rename("predicted estimate" = pred_mean_q50_pi_popn_bias, 
+         "intercept" = est_int_logit_bias) %>%
+  pivot_longer(cols=c(`predicted estimate`, `intercept`), names_to = 
+                 "est_type", values_to = "estimates") %>%
+  mutate(est_type = fct_relevel(est_type, c('predicted estimate', 'intercept')),
+         spec_N = as.factor(spec_N),
+         spec = fct_recode(spec, "Spec = 0.980" = "0.980")) %>% 
+  filter(n_level == "20", samp_size == "4000", est_type == "predicted estimate") %>% 
+  ggplot(., aes(x=spec_N, y=estimates,colour = model)) + 
+  geom_hline(yintercept=0, lty=2, col="darkgrey") +
+  geom_boxplot() +
+  facet_wrap(.~spec, ncol = 2) +
+  labs(y = expression(hat(pi) - pi),
+       x = expression("Specificity sample size (" ~ m[gamma] * ")"), 
+       colour = "Model") +
+  scale_colour_viridis_d(end = .8) +
+  guides(colour = guide_legend(nrow = 1)) +
+  theme_light() +
+  theme(legend.position="bottom", 
+        text = element_text(size=15))
+
+ggsave(here("code/figures/estSpec_n20_pi_y-1.png"), width = 21, height = 16, units = "cm")
+
+```
+
+```{r estSpec_n20_pi_y_specN, out.height="6cm", out.width="8cm"}
+
+plot_dat %>% 
+  rename("predicted estimate" = pred_mean_q50_pi_popn_bias, 
+         "intercept" = est_int_logit_bias) %>%
+  pivot_longer(cols=c(`predicted estimate`, `intercept`), names_to = 
+                 "est_type", values_to = "estimates") %>%
+  mutate(est_type = fct_relevel(est_type, c('predicted estimate', 'intercept')),
+         spec_N = as.factor(spec_N),
+         spec = fct_recode(spec, "Spec = 0.980" = "0.980"),
+         n_level = extract_numeric(n_level),
+         spec = extract_numeric(spec)) %>% 
+  filter(n_level !=20, samp_size == "4000", est_type == "predicted estimate") %>% 
+  ggplot(., aes(x=spec_N, y=estimates,colour = model)) + 
+  geom_hline(yintercept=0, lty=2, col="darkgrey") +
+  geom_boxplot() +
+  facet_grid(spec~ n_level) +
+  labs(y = expression(hat(pi) - pi),
+       x = expression("Specificity sample size (" ~ m[gamma] * ")"), 
+       colour = "Model") +
+  scale_colour_viridis_d(end = .8) +
+  guides(colour = guide_legend(nrow = 1)) +
+  theme_light() +
+  theme(legend.position="bottom", 
+        text = element_text(size=15))
+
+ggsave(here("code/figures/appendix_estSpec_other_predest-1.png"), width = 21, height = 21, units = "cm")
+```
+
+
+
+# Sim 3
+```{r sim3_bias} 
+res_sim3_all_mat = rbind(res_sim2_es_mat %>% filter(model %in% 3:5), res_sim3_FE_mat) %>%
+  mutate(samp_size = factor(samp_size),
+         n_level = factor(n_level),
+         spec = as.factor(spec),
+         spec_N = factor(TN + FP), 
+         across(.cols=c(pred_mean_q50:pred_mean_q95),  # calculating bias against pi
+                .fns = function(x){x - pi_popndata_truth}, 
+                .names="{.col}_pi_popn_bias" ),   
+         across(.cols=c(psamp_mean_q50:psamp_mean_q95),  # calculating bias against pi
+                .fns = function(x){x - p_spec_popndata_truth}, 
+                .names="{.col}_p_y_popn_bias" )) %>%
+  rename(est_int_invlogit = est_int) %>%
+  unite(col="TN_FP", TN, FP, sep="_") %>%
+  mutate(TN_FP = as.factor(TN_FP)) 
+ 
+res_sim3_all_mat %>%
+  separate(model, into = c("model", "FE"), sep="_", extra = "drop", fill = "right") %>%# separating model and FE
+  mutate(FE = replace_na(FE, "No"),
+           FE = fct_recode(FE, "Two" = 'twoFE', "One" = 'oneFE'),
+           FE = fct_relevel(FE, "No", "One", "Two"), 
+           model = as.factor(model),
+         spec = fct_recode(spec, "Spec = 0.980" = "0.980")) %>%
+  filter(n_level == "20", samp_size == "4000") %>%
+  ggplot(aes(x=model, y=pred_mean_q50_pi_popn_bias, col=FE)) +
+  geom_hline(yintercept=0) +  
+  geom_boxplot()+
+  facet_grid(spec_N~spec, scales = "free_y") +
+  labs(
+       y = expression(hat(pi) - pi), 
+       x = "Model",
+       col = "Fixed effects present") +
+  theme_bw() + 
+  scale_color_brewer(palette="Dark2") +
+  theme(legend.position="bottom",
+        text = element_text(size = 14)) 
+
+ggsave(here("code/figures/appendix_experiment_3_sim.png"), width = 21, height = 21, units = "cm")
+
+res_sim3_all_mat %>%
+  separate(model, into = c("model", "FE"), sep="_", extra = "drop", fill = "right") %>%# separating model and FE
+  mutate(FE = replace_na(FE, "No"),
+           FE = fct_recode(FE, "Two" = 'twoFE', "One" = 'oneFE'),
+           FE = fct_relevel(FE, "No", "One", "Two"), 
+           model = as.factor(model),
+         spec = fct_recode(spec, "Spec = 0.980" = "0.980")) %>%
+  filter(n_level == "20", samp_size == "4000", spec_N == "800") %>%
+  ggplot(aes(x=model, y=pred_mean_q50_pi_popn_bias, col=FE)) +
+  geom_hline(yintercept=0) +  
+  geom_boxplot()+
+  facet_grid(.~spec, scales = "free_y") +
+  labs(
+       y = expression(hat(pi) - pi), 
+       x = "Model",
+       col = "Fixed effects present") +
+  theme_bw() + 
+  scale_color_brewer(palette="Dark2") +
+  theme(legend.position="bottom",
+        text = element_text(size = 14)) 
+
+
+ggsave(here("code/figures/experiment_3_sim.png"), width = 21, height = 8, units = "cm")
+```
+
+
+

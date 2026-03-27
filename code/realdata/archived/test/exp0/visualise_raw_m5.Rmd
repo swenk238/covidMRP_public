@@ -1,0 +1,309 @@
+---
+title: "Visualisation of covidMRP data and results - model 5"
+author: "Swen Kuh"
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+Visualising raw data proportion of outcome and MRP estimate for the small areas: 
+
+```{r setup, echo=F, warning=F, message=F}
+## Visualising raw covidMRP data
+library(here)
+library(ggplot2)
+library(tidyverse)
+library(HDInterval)
+```
+
+```{r,  echo=F, warning=F, message=F}
+# data 
+source(here("code/data_list.R"))
+data_list$strata = as.factor(data_list$strata)
+
+# model 5 results 
+m5_postpred <- readRDS(here("results/model files/m5_postpred.RDS"))
+
+# making small area MRP estimates 
+p_pop_post_m5 = m5_postpred$draws("p_pop", format="matrix") # stan output
+n_sim = nrow(p_pop_post_m5)
+n_postcode = data_list$n_postcode
+N_pop1 = data_list$N_pop1
+n_strata = data_list$n_strata
+n_seifa = data_list$n_seifa
+n_age = data_list$n_age 
+```
+
+```{r plotting postcode, echo=F, warning=F, message=F}
+a_postcode = m5_postpred$summary("a_postcode")[,c('variable','median')] |> 
+  cbind(postcode = levels(data_list$postcode))
+
+ypred_fit5_postcode <- array(NA, c(n_sim, n_postcode))
+for(s in 1:n_sim){
+  for(j in 1:n_postcode){  
+    ok <- data_list$postcode_pop==j
+    ypred_fit5_postcode[s,j] <- sum(N_pop1[ok]*p_pop_post_m5[s,ok])/sum(N_pop1[ok])
+  }
+}
+colnames(ypred_fit5_postcode) =  levels(data_list$postcode) # naming so we can use it in mcmc_intervals()
+
+# HDI and CI of MRP SAEs
+MRP_postcode <- as.data.frame(matrix(NA, nrow=n_postcode, ncol=10))
+colnames(MRP_postcode) <- c("MRP Estimate","95%HDI_LL","95%HDI_UL","90%HDI_LL",
+                            "90%HDI_UL","95%CI_LL","95%CI_UL","90%CI_LL","90%CI_UL", "postcode")
+MRP_postcode[,'postcode'] <- levels(data_list$postcode)
+for (j in 1:n_postcode){
+  MRP_postcode[j,1] <- median(ypred_fit5_postcode[,j])
+  MRP_postcode[j,2] <- hdi(ypred_fit5_postcode[,j], credMass=0.95)[1]
+  MRP_postcode[j,3] <- hdi(ypred_fit5_postcode[,j], credMass=0.95)[2]
+  MRP_postcode[j,4] <- hdi(ypred_fit5_postcode[,j], credMass=0.90)[1]
+  MRP_postcode[j,5] <- hdi(ypred_fit5_postcode[,j], credMass=0.90)[2]
+  MRP_postcode[j,6] <- quantile(ypred_fit5_postcode[,j], probs=0.025)
+  MRP_postcode[j,7] <- quantile(ypred_fit5_postcode[,j], probs=0.975)
+  MRP_postcode[j,8] <- quantile(ypred_fit5_postcode[,j], probs=0.05)
+  MRP_postcode[j,9] <- quantile(ypred_fit5_postcode[,j], probs=0.95)
+}
+res_postcode = left_join(a_postcode, MRP_postcode, by='postcode')
+
+tab_pcode = tab |> 
+    group_by(postcode) |> 
+    summarise(sum_y = sum(positive),
+              n = sum(total),
+              prop_y = sum_y/n, 
+              strata = strata, 
+              seifa = seifa)
+
+col_palatte = hcl.colors(5, palette="zissou1")
+
+# proportion of outcome - postcode (n_j > 1) ####
+( g1 =  tab_pcode |>
+    filter(sum_y > 0) |> 
+    arrange(desc(prop_y)) |> 
+    left_join(MRP_postcode, by="postcode") |> 
+    ggplot(aes(x= fct_reorder(postcode, desc(prop_y)), colour = factor(strata))) + # arranging by prob of outcome
+    geom_point(aes(y=prop_y)) + 
+    scale_color_manual(values=col_palatte) +
+    geom_errorbar(aes(ymin=`90%CI_LL`, ymax=`90%CI_UL`), width=.4, col="#CC6677", alpha=0.3) +
+    geom_point(aes(y=`MRP Estimate`),col="#CC6677") +
+    labs(x="postcode", y="proportion of outcome", title = "sum(y) > 0, arranged by prop_y, colored by strata") +
+    theme_bw() +
+    theme(axis.text.x = element_text(angle = 90, vjust = 0.2, size=6)) )
+
+( g1s =  tab_pcode |>
+    filter(sum_y > 0) |> 
+    arrange(desc(prop_y)) |> 
+    left_join(MRP_postcode, by="postcode") |> 
+    ggplot(aes(x= fct_reorder(postcode, desc(prop_y)), colour = factor(seifa))) + # arranging by prob of outcome
+    geom_point(aes(y=prop_y)) + 
+    scale_color_manual(values=col_palatte) +
+    geom_errorbar(aes(ymin=`90%CI_LL`, ymax=`90%CI_UL`), width=.4, col="#CC6677", alpha=0.3) +
+    geom_point(aes(y=`MRP Estimate`),col="#CC6677") +
+    labs(x="postcode", y="proportion of outcome", title = "sum(y) > 0, arranged by prop_y, colored by seifa") +
+    theme_bw() +
+    theme(axis.text.x = element_text(angle = 90, vjust = 0.2, size=6)) )
+
+( g2 = tab_pcode |>
+    filter(sum_y > 0) |> 
+    left_join(res_postcode, by="postcode") |> 
+    ggplot(aes(x=fct_reorder(postcode, desc(n)), colour = factor(strata))) +
+    geom_point(aes(y=prop_y)) + 
+    geom_errorbar(aes(ymin=`90%CI_LL`, ymax=`90%CI_UL`), width=.4, col="#CC6677", alpha=0.3) +
+    geom_point(aes(y=`MRP Estimate`),col="#CC6677") +
+    scale_color_manual(values=col_palatte) +
+    labs(x="postcode", y="proportion of outcome", title = "sum(y) > 0, arranged by sum(n_j)") +
+    theme_bw() +
+    theme(axis.text.x = element_text(angle = 90, vjust = 0.2, size=6))  )
+
+# proportion of outcome - postcode (n_j = 1)
+( g3 = tab_pcode |>
+    filter(sum_y == 0) |> 
+    left_join(res_postcode, by="postcode") |> 
+    ggplot(aes(x=fct_reorder(postcode, desc(`MRP Estimate`)), colour = factor(strata))) +
+    geom_point(aes(y=prop_y)) + 
+    geom_errorbar(aes(ymin=`90%CI_LL`, ymax=`90%CI_UL`), width=.4, col="#CC6677", alpha=0.3) +
+    geom_point(aes(y=`MRP Estimate`),col="#CC6677") +
+    scale_color_manual(values=col_palatte) +
+    labs(x="postcode", y="proportion of outcome") +
+    theme_bw() +
+    ylim(0, 0.06) +
+    theme(axis.text.x = element_text(angle = 90, vjust = 0.2, size=6))  + 
+    labs(title = "sum(y) == 0") )
+
+# strata ------------------------------------------------------------------
+a_strata = m5_postpred$summary("a_strata")[,c('variable','median')] |> 
+  cbind(strata = levels(data_list$strata))
+
+ypred_fit5_strata <- array(NA, c(n_sim, n_strata))
+for(s in 1:n_sim){
+  for(j in 1:n_strata){  
+    ok <- data_list$strata_pop==j
+    ypred_fit5_strata[s,j] <- sum(N_pop1[ok]*p_pop_post_m5[s,ok])/sum(N_pop1[ok])
+  }
+}
+colnames(ypred_fit5_strata) =  levels(data_list$strata) # naming so we can use it in mcmc_intervals()
+
+# HDI and CI of MRP SAEs
+MRP_strata <- as.data.frame(matrix(NA, nrow=n_strata, ncol=10))
+colnames(MRP_strata) <- c("MRP Estimate","95%HDI_LL","95%HDI_UL","90%HDI_LL",
+                          "90%HDI_UL","95%CI_LL","95%CI_UL","90%CI_LL","90%CI_UL", "strata")
+MRP_strata[,'strata'] <- levels(data_list$strata)
+for (j in 1:n_strata){
+  MRP_strata[j,1] <- median(ypred_fit5_strata[,j])
+  MRP_strata[j,2] <- hdi(ypred_fit5_strata[,j], credMass=0.95)[1]
+  MRP_strata[j,3] <- hdi(ypred_fit5_strata[,j], credMass=0.95)[2]
+  MRP_strata[j,4] <- hdi(ypred_fit5_strata[,j], credMass=0.90)[1]
+  MRP_strata[j,5] <- hdi(ypred_fit5_strata[,j], credMass=0.90)[2]
+  MRP_strata[j,6] <- quantile(ypred_fit5_strata[,j], probs=0.025)
+  MRP_strata[j,7] <- quantile(ypred_fit5_strata[,j], probs=0.975)
+  MRP_strata[j,8] <- quantile(ypred_fit5_strata[,j], probs=0.05)
+  MRP_strata[j,9] <- quantile(ypred_fit5_strata[,j], probs=0.95)
+}
+res_strata = left_join(a_strata, MRP_strata, by='strata')
+
+# proportion of outcome - strata (n_y == 1 )
+( g_strata = tab |> 
+    group_by(strata) |> 
+    summarise(sum_y = sum(positive),
+              n = sum(total),
+              prop_y = sum_y/n) |>
+    left_join(res_strata, by="strata") |> 
+    ggplot(aes(x=strata)) +
+    geom_point(aes(y=prop_y), col="#88CCEE") + 
+    geom_errorbar(aes(ymin=`90%CI_LL`, ymax=`90%CI_UL`), width=.4, col="#CC6677", alpha=0.3) +
+    geom_point(aes(y=`MRP Estimate`),col="#CC6677") +
+    labs(x="strata", y="proportion of outcome") +
+    theme_bw() +
+    theme(axis.text.x = element_text(angle = 90, vjust = 0.2, size=6))  )
+
+# seifa ------------------------------------------------------------------
+a_seifa = m5_postpred$summary("a_seifa")[,c('variable','median')] |> 
+  cbind(seifa = levels(data_list$seifa))
+
+
+ypred_fit5_seifa <- array(NA, c(n_sim, n_seifa))
+for(s in 1:n_sim){
+  for(j in 1:n_seifa){  
+    ok <- data_list$seifa_pop==j
+    ypred_fit5_seifa[s,j] <- sum(N_pop1[ok]*p_pop_post_m5[s,ok])/sum(N_pop1[ok])
+  }
+}
+colnames(ypred_fit5_seifa) =  levels(data_list$seifa) # naming so we can use it in mcmc_intervals()
+
+# HDI and CI of MRP SAEs
+MRP_seifa <- as.data.frame(matrix(NA, nrow=n_seifa, ncol=10))
+colnames(MRP_seifa) <- c("MRP Estimate","95%HDI_LL","95%HDI_UL","90%HDI_LL",
+                         "90%HDI_UL","95%CI_LL","95%CI_UL","90%CI_LL","90%CI_UL", "seifa")
+MRP_seifa[,'seifa'] <- levels(data_list$seifa)
+for (j in 1:n_seifa){
+  MRP_seifa[j,1] <- median(ypred_fit5_seifa[,j])
+  MRP_seifa[j,2] <- hdi(ypred_fit5_seifa[,j], credMass=0.95)[1]
+  MRP_seifa[j,3] <- hdi(ypred_fit5_seifa[,j], credMass=0.95)[2]
+  MRP_seifa[j,4] <- hdi(ypred_fit5_seifa[,j], credMass=0.90)[1]
+  MRP_seifa[j,5] <- hdi(ypred_fit5_seifa[,j], credMass=0.90)[2]
+  MRP_seifa[j,6] <- quantile(ypred_fit5_seifa[,j], probs=0.025)
+  MRP_seifa[j,7] <- quantile(ypred_fit5_seifa[,j], probs=0.975)
+  MRP_seifa[j,8] <- quantile(ypred_fit5_seifa[,j], probs=0.05)
+  MRP_seifa[j,9] <- quantile(ypred_fit5_seifa[,j], probs=0.95)
+}
+res_seifa = left_join(a_seifa, MRP_seifa, by='seifa')
+
+# proportion of outcome - seifa 
+(g_seifa = tab |> 
+    group_by(seifa) |> 
+    summarise(sum_y = sum(positive),
+              n = sum(total),
+              prop_y = sum_y/n) |>
+    left_join(res_seifa, by="seifa") |> 
+    ggplot(aes(x=seifa)) +
+    geom_point(aes(y=prop_y), col="#88CCEE") + 
+    geom_errorbar(aes(ymin=`90%CI_LL`, ymax=`90%CI_UL`), width=.4, col="#CC6677", alpha=0.3) +
+    geom_point(aes(y=`MRP Estimate`),col="#CC6677") +
+    labs(x="seifa", y="proportion of outcome") +
+    theme_bw() +
+    theme(axis.text.x = element_text(angle = 90, vjust = 0.2, size=6)))
+
+# age ------------------------------------------------------------------
+a_age = m5_postpred$summary("a_age")[,c('variable','median')] |> 
+  cbind(agegp = levels(data_list$agegp))
+
+ypred_fit5_age <- array(NA, c(n_sim, n_age))
+for(s in 1:n_sim){
+  for(j in 1:n_age){  
+    ok <- data_list$agegp_pop==j
+    ypred_fit5_age[s,j] <- sum(N_pop1[ok]*p_pop_post_m5[s,ok])/sum(N_pop1[ok])
+  }
+}
+colnames(ypred_fit5_age) =  levels(data_list$agegp) # naming so we can use it in mcmc_intervals()
+
+# HDI and CI of MRP SAEs
+MRP_age <- as.data.frame(matrix(NA, nrow=n_age, ncol=10))
+colnames(MRP_age) <- c("MRP Estimate","95%HDI_LL","95%HDI_UL","90%HDI_LL",
+                       "90%HDI_UL","95%CI_LL","95%CI_UL","90%CI_LL","90%CI_UL", "agegp")
+MRP_age[,'agegp'] <- levels(data_list$agegp)
+for (j in 1:n_age){
+  MRP_age[j,1] <- median(ypred_fit5_age[,j])
+  MRP_age[j,2] <- hdi(ypred_fit5_age[,j], credMass=0.95)[1]
+  MRP_age[j,3] <- hdi(ypred_fit5_age[,j], credMass=0.95)[2]
+  MRP_age[j,4] <- hdi(ypred_fit5_age[,j], credMass=0.90)[1]
+  MRP_age[j,5] <- hdi(ypred_fit5_age[,j], credMass=0.90)[2]
+  MRP_age[j,6] <- quantile(ypred_fit5_age[,j], probs=0.025)
+  MRP_age[j,7] <- quantile(ypred_fit5_age[,j], probs=0.975)
+  MRP_age[j,8] <- quantile(ypred_fit5_age[,j], probs=0.05)
+  MRP_age[j,9] <- quantile(ypred_fit5_age[,j], probs=0.95)
+}
+res_age = left_join(a_age, MRP_age, by='agegp')
+
+# proportion of outcome - age 
+(g_age = tab |> 
+    group_by(agegp) |> 
+    summarise(sum_y = sum(positive),
+              n = sum(total),
+              prop_y = sum_y/n) |>
+    left_join(res_age, by="agegp") |> 
+    ggplot(aes(x=agegp)) +
+    geom_point(aes(y=prop_y), col="#88CCEE") + 
+    geom_errorbar(aes(ymin=`90%CI_LL`, ymax=`90%CI_UL`), width=.4, col="#CC6677", alpha=0.3) +
+    geom_point(aes(y=`MRP Estimate`),col="#CC6677") +
+    labs(x="age", y="proportion of outcome") +
+    theme_bw() +
+    theme(axis.text.x = element_text(angle = 90, vjust = 0.2, size=6)) )
+```
+
+```{r calculating residuals, echo=F}
+# extracting posterior median of alpha's
+a_strat_med = as.numeric(as.matrix(m5_postpred$summary(c("a_strata"))[,'median']))
+a_age_med = as.numeric(as.matrix(m5_postpred$summary(c("a_age"))[,'median']))
+a_seifa_med = as.numeric(as.matrix(m5_postpred$summary(c("a_seifa"))[,'median']))
+a_postcode_med = as.numeric(as.matrix(m5_postpred$summary(c("a_postcode"))[,'median']))
+
+# beta's 
+beta =  as.numeric(as.matrix(m5_postpred$summary('b')[,'median']))
+
+# summing up
+tab$seifa_cont = as.numeric(tab$seifa)
+tab$sum_reg = with(tab, a_strat_med[strata] + a_age_med[agegp] + a_seifa_med[seifa] + beta[1] + beta[2]*sex + beta[3]*seifa_cont)
+
+tab$inv_logit_sum_reg = brms::inv_logit_scaled(tab$sum_reg)
+
+## postcode with 'residuals'
+( g_res = tab |> 
+    group_by(postcode) |> 
+    summarise(sum_y = sum(positive),
+              n = sum(total),
+              prop_y = sum_y/n, 
+              inv_logit_sum_reg = mean(inv_logit_sum_reg)) |>
+    mutate(pseudo_residuals = prop_y - inv_logit_sum_reg) |> 
+    filter(sum_y > 0) |>
+    arrange(prop_y) |> 
+    left_join(res_postcode, by="postcode") |> 
+    mutate(postcode = fct_reorder(postcode, desc(prop_y))) |> # arranging by estimate
+    ggplot(aes(x=postcode)) +
+     geom_point(aes(y=pseudo_residuals), col="green") + 
+    geom_point(aes(y=prop_y), col="#88CCEE") + 
+    geom_errorbar(aes(ymin=`90%CI_LL`, ymax=`90%CI_UL`), width=.4, col="#CC6677", alpha=0.3) +
+    geom_point(aes(y=`MRP Estimate`),col="#CC6677") +
+    labs(x="postcode", y="proportion of outcome", title = "sum(y) > 0, arranged by prop_y. With 'residuals'") +
+    theme_bw() +
+    theme(axis.text.x = element_text(angle = 90, vjust = 0.2, size=6)) )
+```
+
+
+

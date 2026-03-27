@@ -1,0 +1,247 @@
+---
+title: "exp3 - investigating rare event bias"
+author: "Swen Kuh"
+date: "2023-05-10"
+output: pdf_document
+---
+
+Modifying counts in the real data to investigate if our results are due to the rare event bias. We randomly select 5%, 16% and etc. of the data to have y_count=1
+
+```{r setup, warning=F, error=F, message=F, echo=F}
+library(here)
+library(ggplot2)
+library(tidyverse)
+
+# original ####
+res_m1_ori = readRDS(here("results/experiments/exp2/res_m1.RDS"))
+res_m2_ori = readRDS(here("results/experiments/exp2/res_m2.RDS"))
+res_m3_ori = readRDS(here("results/experiments/exp2/res_m3.RDS"))
+res_m4_ori = readRDS(here("results/experiments/exp2/res_m4.RDS"))
+res_m5_ori = readRDS(here("results/experiments/exp2/res_m5.RDS"))
+
+res_exp6_ori = rbind(res_m1_ori$summary("p_avg1")[,c('mean', 'q5', 'q95')],
+                     res_m2_ori$summary("p_avg1")[,c('mean', 'q5', 'q95')],
+                     res_m3_ori$summary("p_avg1")[,c('mean', 'q5', 'q95')],
+                     res_m4_ori$summary("p_avg1")[,c('mean', 'q5', 'q95')],
+                     res_m5_ori$summary("p_avg1")[,c('mean', 'q5', 'q95')])
+res_exp6_ori$model = 1:5
+res_exp6_ori$positives = "original"
+
+
+# 5% ####
+res_m1_5percenty = readRDS(here("results/experiments/exp6/m1_5percenty.RDS"))
+res_m2_5percenty = readRDS(here("results/experiments/exp6/m2_5percenty.RDS"))
+res_m3_5percenty = readRDS(here("results/experiments/exp6/m3_5percenty.RDS"))
+res_m4_5percenty = readRDS(here("results/experiments/exp6/m4_5percenty.RDS"))
+res_m5_5percenty = readRDS(here("results/experiments/exp6/m5_5percenty.RDS"))
+
+res_exp6_5percenty = rbind(res_m1_5percenty$summary("p_avg1")[,c('mean', 'q5', 'q95')],
+                           res_m2_5percenty$summary("p_avg1")[,c('mean', 'q5', 'q95')],
+                           res_m3_5percenty$summary("p_avg1")[,c('mean', 'q5', 'q95')],
+                           res_m4_5percenty$summary("p_avg1")[,c('mean', 'q5', 'q95')],
+                           res_m5_5percenty$summary("p_avg1")[,c('mean', 'q5', 'q95')])
+res_exp6_5percenty$model = 1:5
+res_exp6_5percenty$positives = "5%"
+
+# 16% ####
+res_m1_16percenty = readRDS(here("results/experiments/exp6/m1_16percenty.RDS"))
+res_m2_16percenty = readRDS(here("results/experiments/exp6/m2_16percenty.RDS"))
+res_m3_16percenty = readRDS(here("results/experiments/exp6/m3_16percenty.RDS"))
+res_m4_16percenty = readRDS(here("results/experiments/exp6/m4_16percenty.RDS"))
+res_m5_16percenty = readRDS(here("results/experiments/exp6/m5_16percenty.RDS"))
+
+res_exp6_16percenty = rbind(res_m1_16percenty$summary("p_avg1")[,c('mean', 'q5', 'q95')],
+                            res_m2_16percenty$summary("p_avg1")[,c('mean', 'q5', 'q95')],
+                            res_m3_16percenty$summary("p_avg1")[,c('mean', 'q5', 'q95')],
+                            res_m4_16percenty$summary("p_avg1")[,c('mean', 'q5', 'q95')],
+                            res_m5_16percenty$summary("p_avg1")[,c('mean', 'q5', 'q95')])
+res_exp6_16percenty$model = 1:5
+res_exp6_16percenty$positives = "16%"
+
+# 95% ####
+res_m1_95percenty = readRDS(here("results/experiments/exp6/m1_95percenty.RDS"))
+res_m2_95percenty = readRDS(here("results/experiments/exp6/m2_95percenty.RDS"))
+res_m3_95percenty = readRDS(here("results/experiments/exp6/m3_95percenty.RDS"))
+res_m4_95percenty = readRDS(here("results/experiments/exp6/m4_95percenty.RDS"))
+res_m5_95percenty = readRDS(here("results/experiments/exp6/m5_95percenty.RDS"))
+
+res_exp6_95percenty = rbind(res_m1_95percenty$summary("p_avg1")[,c('mean', 'q5', 'q95')],
+                            res_m2_95percenty$summary("p_avg1")[,c('mean', 'q5', 'q95')],
+                            res_m3_95percenty$summary("p_avg1")[,c('mean', 'q5', 'q95')],
+                            res_m4_95percenty$summary("p_avg1")[,c('mean', 'q5', 'q95')],
+                            res_m5_95percenty$summary("p_avg1")[,c('mean', 'q5', 'q95')])
+res_exp6_95percenty$model = 1:5
+res_exp6_95percenty$positives = "95%"
+
+
+# 99% ####
+res_m1_99percenty = readRDS(here("results/experiments/exp6/m1_99percenty.RDS"))
+res_m2_99percenty = readRDS(here("results/experiments/exp6/m2_99percenty.RDS"))
+res_m3_99percenty = readRDS(here("results/experiments/exp6/m3_99percenty.RDS"))
+res_m4_99percenty = readRDS(here("results/experiments/exp6/m4_99percenty.RDS"))
+res_m5_99percenty = readRDS(here("results/experiments/exp6/m5_99percenty.RDS"))
+
+res_exp6_99percenty = rbind(res_m1_99percenty$summary("p_avg1")[,c('mean', 'q5', 'q95')],
+                            res_m2_99percenty$summary("p_avg1")[,c('mean', 'q5', 'q95')],
+                            res_m3_99percenty$summary("p_avg1")[,c('mean', 'q5', 'q95')],
+                            res_m4_99percenty$summary("p_avg1")[,c('mean', 'q5', 'q95')],
+                            res_m5_99percenty$summary("p_avg1")[,c('mean', 'q5', 'q95')])
+res_exp6_99percenty$model = 1:5
+res_exp6_99percenty$positives = "99%"
+
+## plotting ####
+rbind(res_exp6_ori, res_exp6_5percenty, res_exp6_16percenty) |> 
+  as_tibble() |> 
+  ggplot(aes(x=model, y=mean, col=positives)) + 
+  geom_point(position=position_dodge(width=0.5), size=2) +
+  geom_line(position=position_dodge(width=0.5)) + 
+  geom_errorbar(position=position_dodge(width=0.5),aes(x=model,ymin=q5, ymax=q95), width=.2) +
+  scale_color_brewer(palette='Set1') +
+  geom_hline(yintercept=c(0.016, 0.05, 0.16), lty=2, col=c('green','blue','red')) +
+  ylab('MRP estimate') +
+  ggtitle("Real data with modified y counts")
+
+
+rbind(res_exp6_95percenty, res_exp6_99percenty) |> 
+ as_tibble() |> 
+  ggplot(aes(x=model, y=mean, col=positives)) + 
+  geom_point(position=position_dodge(width=0.5), size=2) +
+  geom_line(position=position_dodge(width=0.5)) + 
+  geom_errorbar(position=position_dodge(width=0.5),aes(x=model,ymin=q5, ymax=q95), width=.2) +
+  scale_color_brewer(palette='Set1') +
+  geom_hline(yintercept=c(0.95, 0.99), lty=2, col=c('red','blue')) +
+  ylab('MRP estimate') +
+  ggtitle("Real data with modified y counts")
+```
+```{r original, warning=F, error=F, message=F, echo=F}
+res_exp6_ori = rbind(res_m1_ori$draws(format="df") |>
+                              dplyr::select(.draw, `sens`, `spec`, `p_avg1`) |> 
+                              as_tibble() |> 
+                              mutate(model="1"),
+                            res_m2_ori$draws(format="df") |>
+                              dplyr::select(.draw, `sens`, `spec`, `p_avg1`) |> 
+                              as_tibble() |> 
+                              mutate(model="2"),
+                            res_m3_ori$draws(format="df") |>
+                              dplyr::select(.draw, `sens`, `spec`, `p_avg1`) |> 
+                              as_tibble() |> 
+                              mutate(model="3"),
+                            res_m4_ori$draws(format="df") |>
+                              dplyr::select(.draw, `sens`, `spec`, `p_avg1`) |> 
+                              as_tibble() |> 
+                              mutate(model="4"),
+                            res_m5_ori$draws(format="df") |>
+                              dplyr::select(.draw, `sens`, `spec`, `p_avg1`) |> 
+                              as_tibble() |> 
+                              mutate(model="5"))
+
+post_med_ori = res_exp6_ori |> group_by(model) |> summarise(post_med = median(p_avg1))
+
+( res_exp6_ori |> 
+ ggplot(aes(x=(1-spec), y=p_avg1)) + 
+    facet_wrap(~model, ncol=3, scales="free_y") +
+    geom_point(alpha=0.3, shape=16, size=0.1) +
+    geom_hline(aes(yintercept=0.016), linetype="dashed", color="purple") +
+    geom_text(data=post_med_ori, aes(x=0.015,y=0.012), label=round(post_med_ori$post_med,3)) +
+    ggtitle(paste0('Posterior of p_avg vs. (1-specificity): original data')) )
+```
+
+```{r 16 perc, warning=F, error=F, message=F, echo=F}
+res_exp6_16percenty = rbind(res_m1_16percenty$draws(format="df") |>
+                              dplyr::select(.draw, `sens`, `spec`, `p_avg1`) |> 
+                              as_tibble() |> 
+                              mutate(model="1"),
+                            res_m2_16percenty$draws(format="df") |>
+                              dplyr::select(.draw, `sens`, `spec`, `p_avg1`) |> 
+                              as_tibble() |> 
+                              mutate(model="2"),
+                            res_m3_16percenty$draws(format="df") |>
+                              dplyr::select(.draw, `sens`, `spec`, `p_avg1`) |> 
+                              as_tibble() |> 
+                              mutate(model="3"),
+                            res_m4_16percenty$draws(format="df") |>
+                              dplyr::select(.draw, `sens`, `spec`, `p_avg1`) |> 
+                              as_tibble() |> 
+                              mutate(model="4"),
+                            res_m5_16percenty$draws(format="df") |>
+                              dplyr::select(.draw, `sens`, `spec`, `p_avg1`) |> 
+                              as_tibble() |> 
+                              mutate(model="5"))
+
+post_med_16percenty = res_exp6_16percenty |> group_by(model) |> summarise(post_med = median(p_avg1))
+
+res_exp6_16percenty |> 
+ ggplot(aes(x=(1-spec), y=p_avg1)) + 
+    facet_wrap(~model, ncol=3, scales="free_y") +
+    geom_point(alpha=0.3, shape=16, size=0.1) +
+    geom_hline(aes(yintercept=0.16), linetype="dashed", color="purple") +
+    geom_text(data=post_med_16percenty, aes(x=0.015,y=0.18), label=round(post_med_16percenty$post_med,3)) +
+    ggtitle(paste0('Posterior of p_avg vs. (1-specificity): modified 16% positive counts'))
+```
+
+```{r 95perc positives, warning=F, error=F, message=F, echo=F}
+res_exp6_95percenty = rbind(res_m1_95percenty$draws(format="df") |>
+                              dplyr::select(.draw, `sens`, `spec`, `p_avg1`) |> 
+                              as_tibble() |> 
+                              mutate(model="1"),
+                            res_m2_95percenty$draws(format="df") |>
+                              dplyr::select(.draw, `sens`, `spec`, `p_avg1`) |> 
+                              as_tibble() |> 
+                              mutate(model="2"),
+                            res_m3_95percenty$draws(format="df") |>
+                              dplyr::select(.draw, `sens`, `spec`, `p_avg1`) |> 
+                              as_tibble() |> 
+                              mutate(model="3"),
+                            res_m4_95percenty$draws(format="df") |>
+                              dplyr::select(.draw, `sens`, `spec`, `p_avg1`) |> 
+                              as_tibble() |> 
+                              mutate(model="4"),
+                            res_m5_95percenty$draws(format="df") |>
+                              dplyr::select(.draw, `sens`, `spec`, `p_avg1`) |> 
+                              as_tibble() |> 
+                              mutate(model="5"))
+
+post_med_95percenty = res_exp6_95percenty |> group_by(model) |> summarise(post_med = median(p_avg1))
+
+res_exp6_95percenty |> 
+ ggplot(aes(x=sens, y=p_avg1)) + 
+    facet_wrap(~model, ncol=3, scales="free_y") +
+    geom_point(alpha=0.3, shape=16, size=0.1) +
+    geom_hline(aes(yintercept=0.95), linetype="dashed", color="purple") +
+    geom_text(data=post_med_95percenty, aes(x=0.95,y=0.97), label=round(post_med_95percenty$post_med,3)) +
+    ggtitle(paste0('Posterior of p_avg vs. sensitivity: modified 95% positive counts'))
+```
+
+```{r 99perc positives, warning=F, error=F, message=F, echo=F}
+res_exp6_99percenty = rbind(res_m1_99percenty$draws(format="df") |>
+                              dplyr::select(.draw, `sens`, `spec`, `p_avg1`) |> 
+                              as_tibble() |> 
+                              mutate(model="1"),
+                            res_m2_99percenty$draws(format="df") |>
+                              dplyr::select(.draw, `sens`, `spec`, `p_avg1`) |> 
+                              as_tibble() |> 
+                              mutate(model="2"),
+                            res_m3_99percenty$draws(format="df") |>
+                              dplyr::select(.draw, `sens`, `spec`, `p_avg1`) |> 
+                              as_tibble() |> 
+                              mutate(model="3"),
+                            res_m4_99percenty$draws(format="df") |>
+                              dplyr::select(.draw, `sens`, `spec`, `p_avg1`) |> 
+                              as_tibble() |> 
+                              mutate(model="4"),
+                            res_m5_99percenty$draws(format="df") |>
+                              dplyr::select(.draw, `sens`, `spec`, `p_avg1`) |> 
+                              as_tibble() |> 
+                              mutate(model="5"))
+
+post_med_99percenty = res_exp6_99percenty|> group_by(model) |> summarise(post_med = median(p_avg1))
+
+
+res_exp6_99percenty |> 
+ ggplot(aes(x=sens, y=p_avg1)) + 
+    facet_wrap(~model, ncol=3, scales="free_y") +
+    geom_point(alpha=0.3, shape=16, size=0.1) +
+    geom_hline(aes(yintercept=0.99), linetype="dashed", color="purple") +
+    geom_text(data=post_med_99percenty, aes(x=0.985,y=0.995), label=round(post_med_99percenty$post_med,3)) +
+    ggtitle(paste0('Posterior of p_avg vs. sensitivity: modified 99% positive counts')) 
+```

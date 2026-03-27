@@ -1,0 +1,73 @@
+---
+title: "Experiment 1a - flipped y's"
+author: "Swen Kuh"
+date: "2023-03-08"
+output: pdf_document
+---
+
+Flipping the y's (changing 0's to 1's and vice versa) to see if sensitivity is influencing the impact
+
+```{r, echo=F, warning=F, message=F}
+library(here)
+library(ggplot2)
+library(tidyverse)
+
+## results from fixed spec
+load(here("results/experiments/exp1/flipped y/fixedspec.RData"))
+res_est_spec = rbind(res_posterior_m1$summary("p_avg1")[,c('mean', 'q5', 'q95')],
+                     res_posterior_m2$summary("p_avg1")[,c('mean', 'q5', 'q95')],
+                     res_posterior_m3$summary("p_avg1")[,c('mean', 'q5', 'q95')],
+                     res_posterior_m4$summary("p_avg1")[,c('mean', 'q5', 'q95')],
+                     res_posterior_m5$summary("p_avg1")[,c('mean', 'q5', 'q95')],
+                     res_posterior_m6$summary("p_avg1")[,c('mean', 'q5', 'q95')])
+res_est_spec$model = 1:6
+res_est_spec$modification = "spec = 0.99, sens ~ beta(98, 6)"
+
+rm("res_posterior_m1", "res_posterior_m2", "res_posterior_m3",
+   "res_posterior_m4", "res_posterior_m5", "res_posterior_m6")
+
+## results from fixed sens
+load(here("results/experiments/exp1/flipped y/fixedsens.RData"))
+res_est_sens = rbind(res_posterior_m1$summary("p_avg1")[,c('mean', 'q5', 'q95')],
+                     res_posterior_m2$summary("p_avg1")[,c('mean', 'q5', 'q95')],
+                     res_posterior_m3$summary("p_avg1")[,c('mean', 'q5', 'q95')],
+                     res_posterior_m4$summary("p_avg1")[,c('mean', 'q5', 'q95')],
+                     res_posterior_m5$summary("p_avg1")[,c('mean', 'q5', 'q95')],
+                     res_posterior_m6$summary("p_avg1")[,c('mean', 'q5', 'q95')]) 
+res_est_sens$model = 1:6
+res_est_sens$modification = "spec ~ beta(798, 4), sens = 0.95"
+
+rm("res_posterior_m1", "res_posterior_m2", "res_posterior_m3",
+   "res_posterior_m4", "res_posterior_m5", "res_posterior_m6")
+
+## results from fixed spec and fixed sens
+load(here("results/experiments/exp1/flipped y/fixedspecsens.RData"))
+
+res_est_both = rbind(res_posterior_m1$summary("p_avg1")[,c('mean', 'q5', 'q95')],
+                     res_posterior_m2$summary("p_avg1")[,c('mean', 'q5', 'q95')],
+                     res_posterior_m3$summary("p_avg1")[,c('mean', 'q5', 'q95')],
+                     res_posterior_m4$summary("p_avg1")[,c('mean', 'q5', 'q95')],
+                     res_posterior_m5$summary("p_avg1")[,c('mean', 'q5', 'q95')],
+                     res_posterior_m6$summary("p_avg1")[,c('mean', 'q5', 'q95')]) 
+res_est_both$model = 1:6
+res_est_both$modification = "spec = 0.99, sens = 0.95"
+
+rbind(res_est_spec, res_est_sens, res_est_both) |> 
+  as_tibble() |> 
+  mutate(modification = as_factor(modification)) |> 
+  ggplot(aes(x=model, y=mean, col=modification)) + 
+  geom_point(position=position_dodge(width=0.5), size=2) +
+  geom_line(position=position_dodge(width=0.5)) + 
+  geom_errorbar(position=position_dodge(width=0.5),aes(x=model,ymin=q5, ymax=q95), width=.2) +
+  scale_color_brewer(palette='Set1') +
+  geom_hline(yintercept=0.983, lty=2, col="grey") +
+  ggtitle("Real data (flipped y's)")
+
+```
+The priors look like this: 
+```{r}
+par(mfrow=c(1,2))
+hist(rbeta(10000,98,6), main="Sensitivity")
+hist(rbeta(10000,798,4), main="Specificity")
+
+```

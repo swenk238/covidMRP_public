@@ -1,0 +1,386 @@
+---
+title: "Experiment 2 - plots"
+author: "Swen Kuh"
+date: "2023-03-08"
+output: pdf_document
+---
+
+Plot the results of implementing the constraints on p and p_sample:
+
+```{r, warning=F, message=F, echo=F}
+library(ggplot2)
+library(tidyverse)
+library(here)
+library(cmdstanr)
+res_m1 <- readRDS("~/GitHub/covidMRP/results/experiments/exp2/res_m1.RDS")
+res_m1_exp <- readRDS("~/GitHub/covidMRP/results/experiments/exp2/res_m1_exp_psamp.RDS")
+res_m1_p <- readRDS("~/GitHub/covidMRP/results/experiments/exp2/res_m1_exp_p.RDS")
+
+res_m2 <- readRDS("~/GitHub/covidMRP/results/experiments/exp2/res_m2.RDS")
+res_m2_exp <- readRDS("~/GitHub/covidMRP/results/experiments/exp2/res_m2_exp_psamp.RDS")
+res_m2_p <- readRDS("~/GitHub/covidMRP/results/experiments/exp2/res_m2_exp_p.RDS")
+
+res_m3 <- readRDS("~/GitHub/covidMRP/results/experiments/exp2/res_m3.RDS")
+res_m3_exp <- readRDS("~/GitHub/covidMRP/results/experiments/exp2/res_m3_exp_psamp.RDS")
+res_m3_p <- readRDS("~/GitHub/covidMRP/results/experiments/exp2/res_m3_exp_p.RDS")
+
+res_m4 <- readRDS("~/GitHub/covidMRP/results/experiments/exp2/res_m4.RDS")
+res_m4_exp <- readRDS("~/GitHub/covidMRP/results/experiments/exp2/res_m4_exp_psamp.RDS")
+res_m4_p <- readRDS("~/GitHub/covidMRP/results/experiments/exp2/res_m4_exp_p.RDS")
+
+res_m5 <- readRDS("~/GitHub/covidMRP/results/experiments/exp2/res_m5.RDS")
+res_m5_exp <- readRDS("~/GitHub/covidMRP/results/experiments/exp2/res_m5_exp_psamp.RDS")
+res_m5_p <- readRDS("~/GitHub/covidMRP/results/experiments/exp2/res_m5_exp_p.RDS")
+
+res_m6 <- readRDS("~/GitHub/covidMRP/results/experiments/exp2/res_m6.RDS")
+res_m6_exp <- readRDS("~/GitHub/covidMRP/results/experiments/exp2/res_m6_exp_psamp.RDS")
+res_m6_p <- readRDS("~/GitHub/covidMRP/results/experiments/exp2/res_m6_exp_p.RDS")
+
+res_est = rbind(res_m1$summary("p_avg1")[,c('mean', 'q5', 'q95')],
+                res_m2$summary("p_avg1")[,c('mean', 'q5', 'q95')],
+                res_m3$summary("p_avg1")[,c('mean', 'q5', 'q95')],
+                res_m4$summary("p_avg1")[,c('mean', 'q5', 'q95')],
+                res_m5$summary("p_avg1")[,c('mean', 'q5', 'q95')],
+                res_m6$summary("p_avg1")[,c('mean', 'q5', 'q95')]) 
+res_est = res_est*100
+res_est$model = 1:6
+res_est$constraint = "none"
+
+res_exp_est = rbind(res_m1_exp$summary("p_avg1")[,c('mean', 'q5', 'q95')],
+                    res_m2_exp$summary("p_avg1")[,c('mean', 'q5', 'q95')],
+                    res_m3_exp$summary("p_avg1")[,c('mean', 'q5', 'q95')],
+                    res_m4_exp$summary("p_avg1")[,c('mean', 'q5', 'q95')],
+                    res_m5_exp$summary("p_avg1")[,c('mean', 'q5', 'q95')],
+                    res_m6_exp$summary("p_avg1")[,c('mean', 'q5', 'q95')])
+res_exp_est = res_exp_est*100
+res_exp_est$model = 1:6
+res_exp_est$constraint = "p sample only"
+
+res_exp_p = rbind(res_m1_p$summary("p_avg1")[,c('mean', 'q5', 'q95')],
+                  res_m2_p$summary("p_avg1")[,c('mean', 'q5', 'q95')],
+                  res_m3_p$summary("p_avg1")[,c('mean', 'q5', 'q95')],
+                  res_m4_p$summary("p_avg1")[,c('mean', 'q5', 'q95')],
+                  res_m5_p$summary("p_avg1")[,c('mean', 'q5', 'q95')],
+                  res_m6_p$summary("p_avg1")[,c('mean', 'q5', 'q95')])
+res_exp_p = res_exp_p*100
+res_exp_p$model = 1:6
+res_exp_p$constraint = "both"
+```
+
+Model with constraint for p_sample:
+```{r}
+file_m1_exp_psamp <- file.path(here("code/experiments/exp2/stan/model1_exp2.stan"))
+cmdstan_model(file_m1_exp_psamp)
+```
+
+Model with constraint for both p and p_sample:
+```{r}
+file_m1_exp_p <- file.path(here("code/experiments/exp2/stan/model1_exp2_p.stan"))
+cmdstan_model(file_m1_exp_p)
+```
+
+```{r, echo=F}
+( exp2_plot = rbind(res_est, res_exp_est, res_exp_p) |> 
+  as_tibble() |> 
+  mutate(constraint = as_factor(constraint)) |> 
+  ggplot(aes(x=model, y=mean, col=constraint)) + 
+  geom_point(position=position_dodge(width=0.5), size=2) +
+  geom_line(position=position_dodge(width=0.5)) + 
+  geom_errorbar(position=position_dodge(width=0.5),aes(x=model,ymin=q5, ymax=q95), width=.2) +
+  scale_color_brewer(palette='Set1') +
+  geom_hline(yintercept=1.6, lty=2, col="grey") +
+  ylim(0,2) +
+  labs(title="Real data") )
+
+ggsave(exp2_plot, width=10, height=8, filename = here("results/experiments/exp2_constraint.png"))
+```
+
+
+## Fixing the constraint 
+
+```{r libraries, warning=F, message=F}
+library(here)
+library(cmdstanr)
+# data 
+source(here("code/data_list.R"), echo=F)
+options(mc.cores = 8)
+```
+```{r model1, warning=F, message=F,  echo=F,  results="hide",cache=T}
+# model1
+file_m1 <- file.path(here("code/stan/model1.stan"))
+mod_m1 <- cmdstan_model(file_m1)
+res_m1 <- mod_m1$sample(
+  data = data_list,
+  seed = 2345,
+  chains = 4,
+  parallel_chains = 4,
+  refresh = 500, # print update every 500 iters
+)
+res_m1$summary("p_avg1")
+res_m1$save_object(file =here("results/experiments/exp2/res_m1.RDS"))
+
+# model 1 with constraint for psamp
+file_m1_exp <- file.path(here("code/experiments/exp2/stan/model1_exp2.stan"))
+mod_m1_exp <- cmdstan_model(file_m1_exp)
+res_m1_exp <- mod_m1_exp$sample(
+  data = data_list,
+  seed = 2345,
+  chains = 4,
+  parallel_chains = 4,
+  refresh = 500, # print update every 500 iters
+)
+res_m1_exp$summary("p_avg1")
+res_m1_exp$save_object(file =here("results/experiments/exp2/res_m1_exp_psamp.RDS"))
+
+# model 1 with constraint for p
+file_m1_exp_p <- file.path(here("code/experiments/exp2/stan/model1_exp2_p.stan"))
+mod_m1_exp_p <- cmdstan_model(file_m1_exp_p)
+res_m1_exp_p <- mod_m1_exp_p$sample(
+  data = data_list,
+  seed = 2345,
+  chains = 4,
+  parallel_chains = 4,
+  refresh = 500, # print update every 500 iters
+)
+res_m1_exp_p$summary("p_avg1")
+res_m1_exp_p$save_object(file=here("results/experiments/exp2/res_m1_exp_p.RDS"))
+```
+
+```{r model2, warning=F, message=F,  echo=F,  results="hide", cache=T}
+# model 2
+file_m2 <- file.path(here("code/stan/model2.stan"))
+mod_m2 <- cmdstan_model(file_m2)
+res_m2 <- mod_m2$sample(
+  data = data_list,
+  seed = 2345,
+  chains = 4,
+  parallel_chains = 4,
+  refresh = 500, # print update every 500 iters
+)
+res_m2$summary("p_avg1")
+res_m2$save_object(file =here("results/experiments/exp2/res_m2.RDS"))
+
+# model 2 with constraint for psamp
+file_m2_exp <- file.path(here("code/experiments/exp2/stan/model2_exp2.stan"))
+mod_m2_exp <- cmdstan_model(file_m2_exp)
+init_fun <- function(){list(spec = 0.9)}
+res_m2_exp <- mod_m2_exp$sample(
+  data = data_list,
+  seed = 2345,
+  chains = 4,
+  parallel_chains = 4,
+  refresh = 500, # print update every 500 iters
+)
+res_m2_exp$summary("p_avg1")
+res_m2_exp$save_object(file =here("results/experiments/exp2/res_m2_exp_psamp.RDS"))
+
+
+# model 2 with constraint for p
+file_m2_exp_p <- file.path(here("code/experiments/exp2/stan/model2_exp2_p.stan"))
+mod_m2_exp_p <- cmdstan_model(file_m2_exp_p)
+res_m2_exp_p <- mod_m2_exp_p$sample(
+  data = data_list,
+  seed = 1257,
+  chains = 4,
+  parallel_chains = 4,
+  refresh = 500, # print update every 500 iters
+)
+res_m2_exp_p$summary("p_avg1")
+res_m2_exp_p$save_object(file =here("results/experiments/exp2/res_m2_exp_p.RDS"))
+
+```
+
+
+```{r model3, warning=F, message=F,  echo=F,  results="hide", cache=T}
+# model 3
+file_m3 <- file.path(here("code/stan/model3.stan"))
+mod_m3 <- cmdstan_model(file_m3)
+res_m3 <- mod_m3$sample(
+  data = data_list,
+  seed = 2345,
+  chains = 4,
+  parallel_chains = 4,
+  refresh = 500, # print update every 500 iters
+)
+res_m3$summary("p_avg1")
+res_m3$save_object(file =here("results/experiments/exp2/res_m3.RDS"))
+
+# model 3 with constraint
+file_m3_exp <- file.path(here("code/experiments/exp2/stan/model3_exp2.stan"))
+mod_m3_exp <- cmdstan_model(file_m3_exp)
+res_m3_exp <- mod_m3_exp$sample(
+  data = data_list,
+  seed = 3563,
+  chains = 4,
+  parallel_chains = 4,
+  init = init_fun,
+  refresh = 500, # print update every 500 iters
+)
+res_m3_exp$summary("p_avg1")
+res_m3_exp$save_object(file =here("results/experiments/exp2/res_m3_exp_psamp.RDS"))
+
+# model 3 with constraint for p
+file_m3_exp_p <- file.path(here("code/experiments/exp2/stan/model3_exp2_p.stan"))
+mod_m3_exp_p <- cmdstan_model(file_m3_exp_p)
+res_m3_exp_p <- mod_m3_exp_p$sample(
+  data = data_list,
+  seed = 2456,
+  chains = 4,
+  parallel_chains = 4,
+  refresh = 500, # print update every 500 iters
+)
+res_m3_exp_p$summary("p_avg1")
+res_m3_exp_p$save_object(file=here("results/experiments/exp2/res_m3_exp_p.RDS"))
+```
+
+```{r model4, warning=F, message=F, echo=F,  results="hide",cache=T}
+# model 4
+file_m4 <- file.path(here("code/stan/model4.stan"))
+mod_m4 <- cmdstan_model(file_m4)
+res_m4 <- mod_m4$sample(
+  data = data_list,
+  seed = 2345,
+  chains = 4,
+  parallel_chains = 4,
+  refresh = 500, # print update every 500 iters
+)
+res_m4$summary("p_avg1")
+res_m4$save_object(file =here("results/experiments/exp2/res_m4.RDS"))
+
+# model 4 with constraint
+file_m4_exp <- file.path(here("code/experiments/exp2/stan/model4_exp2.stan"))
+mod_m4_exp <- cmdstan_model(file_m4_exp)
+res_m4_exp <- mod_m4_exp$sample(
+  data = data_list,
+  seed = 2345,
+  chains = 4,
+  parallel_chains = 4,
+  init = function(){list(spec=0.996)},
+  refresh = 500, # print update every 500 iters
+)
+res_m4_exp$summary("p_avg1")
+res_m4_exp$save_object(file=here("results/experiments/exp2/res_m4_exp_psamp.RDS"))
+
+# model 4 with constraint for p
+file_m4_exp_p <- file.path(here("code/experiments/exp2/stan/model4_exp2_p.stan"))
+mod_m4_exp_p <- cmdstan_model(file_m4_exp_p)
+res_m4_exp_p <- mod_m4_exp_p$sample(
+  data = data_list,
+  seed = 1257,
+  chains = 4,
+  parallel_chains = 4,
+  refresh = 500, # print update every 500 iters
+)
+res_m4_exp_p$summary("p_avg1")
+res_m4_exp_p$save_object(file =here("results/experiments/exp2/res_m4_exp_p.RDS"))
+```
+
+```{r model5, warning=F, message=F, echo=F,  results="hide",cache=T}
+# model 5
+file_m5 <- file.path(here("code/stan/model5.stan"))
+mod_m5 <- cmdstan_model(file_m5)
+res_m5 <- mod_m5$sample(
+  data = data_list,
+  seed = 2345,
+  chains = 4,
+  parallel_chains = 4,
+  refresh = 500, # print update every 500 iters
+)
+res_m5$summary("p_avg1")
+res_m5$save_object(file =here("results/experiments/exp2/res_m5.RDS"))
+
+# model 5 with constraint for p samp
+file_m5_exp <- file.path(here("code/experiments/exp2/stan/model5_exp2.stan"))
+mod_m5_exp <- cmdstan_model(file_m5_exp)
+res_m5_exp <- mod_m5_exp$sample(
+  data = data_list,
+  seed = 2468,
+  chains = 4,
+  parallel_chains = 4,
+  init = function()list(spec=0.996),
+  refresh = 500, # print update every 500 iters
+)
+res_m5_exp$summary("p_avg1")
+res_m5_exp$save_object(file=here("results/experiments/exp2/res_m5_exp_psamp.RDS"))
+
+# model 5 with constraint for p
+file_m5_exp_p <- file.path(here("code/experiments/exp2/stan/model5_exp2_p.stan"))
+mod_m5_exp_p <- cmdstan_model(file_m5_exp_p)
+res_m5_exp_p <- mod_m5_exp_p$sample(
+  data = data_list,
+  seed = 1257,
+  chains = 4,
+  parallel_chains = 4,
+  refresh = 500, # print update every 500 iters
+)
+res_m5_exp_p$summary("p_avg1")
+res_m5_exp_p$save_object(file =here("results/experiments/exp2/res_m5_exp_p.RDS"))
+```
+
+```{r model6, warning=F, message=F, echo=F, results="hide", cache=T}
+# model 6
+file_m6 <- file.path(here("code/stan/model6.stan"))
+mod_m6 <- cmdstan_model(file_m6)
+res_m6 <- mod_m6$sample(
+  data = data_list,
+  seed = 2345,
+  chains = 4,
+  parallel_chains = 4,
+  refresh = 500, # print update every 500 iters
+)
+res_m6$summary("p_avg1")
+res_m6$save_object(file =here("results/experiments/exp2/res_m6.RDS"))
+
+# model 6 with constraint
+file_m6_exp <- file.path(here("code/experiments/exp2/stan/model6_exp2.stan"))
+mod_m6_exp <- cmdstan_model(file_m6_exp)
+res_m6_exp <- mod_m6_exp$sample(
+  data = data_list,
+  seed = 1325,
+  chains = 4,
+  parallel_chains = 4,
+  init = function(){list(spec=0.996)},
+  refresh = 500, # print update every 500 iters
+)
+res_m6_exp$summary("p_avg1")
+res_m6_exp$save_object(file =here("results/experiments/exp2/res_m6_exp_psamp.RDS"))
+
+# model 6 with constraint for p
+file_m6_exp_p <- file.path(here("code/experiments/exp2/stan/model6_exp2_p.stan"))
+mod_m6_exp_p <- cmdstan_model(file_m6_exp_p)
+res_m6_exp_p <- mod_m6_exp_p$sample(
+  data = data_list,
+  seed = 1257,
+  chains = 4,
+  parallel_chains = 4,
+  refresh = 500, # print update every 500 iters
+)
+res_m6_exp_p$summary("p_avg1")
+res_m6_exp_p$save_object(file =here("results/experiments/exp2/res_m6_exp_p.RDS"))
+
+```
+
+
+Checking if p_sample lies within constraints
+```{r p within constraint}
+m1_postpred <- readRDS(here("results/model files/m1_postpred.RDS"))
+m2_postpred <- readRDS(here("results/model files/m2_postpred.RDS"))
+m3_postpred <- readRDS(here("results/model files/m3_postpred.RDS"))
+m4_postpred <- readRDS(here("results/model files/m4_postpred.RDS"))
+m5_postpred <- readRDS(here("results/model files/m5_postpred.RDS"))
+m6_postpred <- readRDS(here("results/model files/m6_postpred.RDS"))
+
+postmat = lapply(1:6, function(x)matrix(NA, nrow=4000, ncol=3))
+pp_list = list(m1_postpred, m2_postpred, m3_postpred,
+               m4_postpred, m5_postpred, m6_postpred)
+for(i in 1:6){
+  postmat[[i]][,1] = pp_list[[i]]$draws("p_sample", format="matrix")[,1]
+  postmat[[i]][,2] =  pp_list[[i]]$draws("spec", format="matrix")[,1]
+  postmat[[i]][,3] =  pp_list[[i]]$draws("sens", format="matrix")[,1]
+  colnames(postmat[[i]]) = c('p_sample', 'spec', 'sens') 
+  postmat[[i]] = postmat[[i]] |> as_tibble()
+  postmat[[i]]$spec_minus = 1 - postmat[[i]]$spec
+  postmat[[i]]$constraint_true = ifelse(postmat[[i]]$p_sample >= postmat[[i]]$spec_minus, 0, 1)
+}
+lapply(postmat, function(x)sum(x$constraint_true))
+```

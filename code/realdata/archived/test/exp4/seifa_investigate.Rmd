@@ -1,0 +1,145 @@
+---
+title: "Seifa investigate"
+author: "Swen Kuh"
+date: "2024-02-26"
+output: pdf_document
+---
+
+```{r setup}
+knitr::opts_chunk$set(dev = "png",
+                      dpi = 300,
+                      out.height = "300px",
+                      out.width = "350px",
+                      echo = FALSE, 
+                      cache = T)
+
+## running marnie's model without fixed effects 
+library(here)
+library(ggplot2)
+library(tidyverse)
+library(arm)
+library(cmdstanr)
+library(brms)
+
+source(here("code/experiments/data_list.R"), echo=F)
+
+options(mc.cores = 8)
+stan_seifaInv_wd <-  'code/experiments/stan/seifa_investigate/'
+stan_og_wd <- 'code/experiments/stan/'
+func_wd <- 'code/experiments/'
+res_wd <- 'results/experiments/exp4/'
+res_seifaInv_wd <- 'results/experiments/exp4/seifa_investigate/'
+res_noFEnoME_wd <- 'results/experiments/exp4/og_noFE_noME/'
+  
+# loading functions to store results
+source(here(paste0(func_wd,'functions.R')))
+```
+
+
+```{r}
+res_m0 <- readRDS(file=here(paste0(res_wd,"res_m0.RDS")))
+res_m1 <- readRDS(file=here(paste0(res_wd,"res_m1.RDS")))
+res_m2 <- readRDS(file=here(paste0(res_wd,"res_m2.RDS")))
+res_m3 <- readRDS(file=here(paste0(res_wd,"res_m3.RDS")))
+res_m4 <- readRDS(file=here(paste0(res_wd,"res_m4.RDS")))
+res_m5 <- readRDS(file=here(paste0(res_wd,"res_m5.RDS")))
+
+res_m3a <-  readRDS(file=here(paste0(res_seifaInv_wd,"res_m3a_rmSeifaCont.RDS")))
+res_m3b <- readRDS(file=here(paste0(res_seifaInv_wd,"res_m3b_rmASeifa.RDS")))
+res_m3c <- readRDS(file=here(paste0(res_seifaInv_wd,"res_m3c_fctSeifa.RDS")))
+
+res_m3a_noME <- readRDS(file=here(paste0(res_noFEnoME_wd,"res_m3a_noFE_noME.RDS")))
+res_m4a_noME <- readRDS(file=here(paste0(res_noFEnoME_wd,"res_m4a_noFE_noME.RDS")))
+res_m5a_noME <- readRDS(file=here(paste0(res_noFEnoME_wd,"res_m5a_noFE_noME.RDS")))
+
+res_m4a <- readRDS(file=here(paste0(res_seifaInv_wd,"res_m4a_rmSeifaCont.RDS")))
+res_m4b <- readRDS(file=here(paste0(res_seifaInv_wd,"res_m4b_rmASeifa.RDS")))
+res_m4c <- readRDS(file=here(paste0(res_seifaInv_wd,"res_m4c_fctSeifa.RDS")))
+res_m4d <- readRDS(file=here(paste0(res_seifaInv_wd,"res_m4d_rmFE.RDS")))
+res_m4e <- readRDS(file=here(paste0(res_seifaInv_wd,"res_m4e_rmSex.RDS")))
+
+res_m5a <- readRDS(file=here(paste0(res_seifaInv_wd,"res_m5a_rmSeifaCont.RDS")))
+res_m5b <- readRDS(file=here(paste0(res_seifaInv_wd,"res_m5b_rmASeifa.RDS")))
+res_m5c <- readRDS(file=here(paste0(res_seifaInv_wd,"res_m5c_fctSeifa.RDS")))
+res_m5d <- readRDS(file=here(paste0(res_seifaInv_wd,"res_m5d_rmFE.RDS")))
+res_m5e <- readRDS(file=here(paste0(res_seifaInv_wd,"res_m5e_rmSex.RDS")))
+
+```
+
+```{r og_withoutFE}
+res_list <- list(res_m0, res_m1, res_m2,
+                 res_m3, res_m4, res_m5)
+res_dup_list <- list(res_m0, res_m1, res_m2,
+                     res_m3, res_m4e, res_m5e, # one fixed effect
+                     res_m0, res_m1, res_m2,
+                     res_m3a, res_m4d, res_m5d) # no fixed effects
+
+do.call(rbind,lapply(append(res_list,res_dup_list), function(x)x$summary("p_avg1")[,c('mean', 'q5', 'q95')])) |> 
+  mutate(FEornot = c(rep('Two',6), rep('One',6), rep('No',6)),
+         model = c(rep(0:5,3))) |>  
+  mutate(FEornot = fct_relevel(as.factor(FEornot), c('No','One','Two')),
+         model = as.factor(model)) |> 
+  as_tibble() |> 
+  arrange(FEornot) |> 
+  ggplot(aes(x=model, y=mean, col=FEornot)) + 
+  geom_rect(aes(xmin = "3", xmax = Inf, ymin = -Inf, ymax = Inf), fill="#e5f5f9", alpha=0.02, color = NA) + # blue grid
+  geom_hline(yintercept=0.016, lty=2, col="gray47") +
+  geom_line(aes(group=FEornot)) +
+  geom_text(aes(x=5.85, y = 0.017), label="Sample average", col = "gray47") +
+  geom_errorbar(aes(x=model,ymin=q5, ymax=q95), width=.2, alpha=0.5) +
+  geom_point(size=2, alpha=0.8) +
+  scale_color_manual( values=c("#59A14F", "#F28E2B", "#756BB1", "#E15759",  "#FDE333", "#59E01F", "#756BB1", "#54278F")  ) +
+  ylim(0, 0.02) +
+  labs(title = "Original data", 
+       y = "MRP estimates",
+       x = "Model",
+       col = "Fixed effects present") +
+  theme_bw()  +
+  theme(legend.position="bottom",
+        plot.title = element_text(size=15, colour="#59A14F"))
+
+```
+
+
+```{r seifa_inv}
+res_list_all <- list(res_m0, res_m1, res_m2,
+                 res_m3, res_m3a, res_m3b, res_m3c, res_m3a_noME,
+                 res_m4, res_m4a, res_m4b, res_m4c, res_m4d, res_m4a_noME, 
+                 res_m5, res_m5a, res_m5b, res_m5c, res_m5d, res_m5a_noME)
+
+do.call(rbind,lapply(res_list_all, function(x)x$summary("p_avg1")[,c('mean', 'q5', 'q95')])) |> 
+  mutate(model = c(0,1,2,
+                   3,'3a','3b','3c', '3a_noME',
+                   4,'4a','4b','4c','4d', '4a_noME',
+                   5,'5a','5b','5c','5d', '5a_noME')) |>  
+  mutate(orig = as.factor(c(rep(1,4), rep(0,4), 1, rep(0,5), 1, rep(0,5)))) |> 
+  as_tibble() |> 
+  ggplot(aes(x=model, y=mean, col=orig)) + 
+  geom_point(position=position_dodge(width=0.5), size=2) +
+  geom_line(position=position_dodge(width=0.5)) + 
+  geom_errorbar(position=position_dodge(width=0.5),aes(x=model,ymin=q5, ymax=q95), width=.2, alpha=0.4) +
+  ylim(0, 0.02) +
+  labs(title="MRP Estimate",
+       subtitle="Marnie's data and model with variations of seifa inclusion") +
+  scale_color_brewer(palette="Accent") +
+  theme_minimal()
+```
+
+
+```{r intercept, eval=F}
+# Intercept
+do.call(rbind,lapply(res_list_all, function(x)x$summary("b[1]")[,c('mean', 'q5', 'q95')])) |> 
+  mutate(model = c(0,1,2,
+                   3,'3a','3b','3c', '3a_noME',
+                   4,'4a','4b','4c','4d', '4a_noME',
+                   5,'5a','5b','5c','5d', '5a_noME')) |> 
+  as_tibble() |> 
+  ggplot(aes(x=model, y=mean)) + 
+  geom_errorbar(position=position_dodge(width=0.5),aes(x=model,ymin=q5, ymax=q95), width=.2, alpha=0.4) +
+  geom_point(position=position_dodge(width=0.5), size=2, col='blue') +
+  labs(title="Intercept",
+       subtitle="Marnie's data and model w/o fixed effects")
+
+res_m5d$summary('b[1]')
+```
+
