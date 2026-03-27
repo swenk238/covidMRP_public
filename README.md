@@ -60,6 +60,7 @@ The issue was that the MRP estimate decreases (away from the crude value of 1.6%
 │   │   │   ├── adding_two_FE.R               <- adding fixed effects
 │   │   │   └── stan                          <- stan code for sim 3
 ├── results
+│   ├── test                                  <- results from previous tests (not included in paper)
 │   ├── results_list.RData                    <- real data results (not in repo due to size)
 │   └── results_sim_list.RData                <- simulation results (not in repo due to size)
 ```
