@@ -1,0 +1,24 @@
+manuals
+files from Marnie/*
+.Rapp.history
+code/**/*.RDS
+temp/
+.RData
+.Rhistory
+.Rproj.user
+.DS_Store
+**/.DS_Store
+.gitignore
+/results/model files
+code/**/*_cache
+code/**/*_files
+code/**/**/tests
+code/realdata/test
+results/*.RData
+results/**/tests
+results/realdata/**/*.RDS
+results/simdata/**/*.RDS
+.rds
+code/experiments/stan/**/test
+code/experiments/**/test
+code/simdata/**/test
