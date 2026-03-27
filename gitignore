@@ -22,4 +22,4 @@ results/simdata/**/*.RDS
 code/experiments/stan/**/test
 code/experiments/**/test
 code/simdata/**/test
-results/realdata
+results/realdata/
