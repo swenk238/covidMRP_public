@@ -24,7 +24,8 @@ The issue was that the MRP estimate decreases (away from the crude value of 1.6%
 │   │   │   ├── SBC
 │   │   │   └── test
 │   │   ├── functions.R
-│   │   ├── models.R                          <- runs and saves all the models using Marnie's code 
+│   │   ├── models.R                          <- runs and saves all the models using Marnie's code
+│   │   ├── reading_res.R                     <- saving iteration results into results_list.RData
 │   │   ├── sim1_noFE_noME
 │   │   │   ├── models_nopsamp.R              <- removing measurement error
 │   │   │   ├── og_noFE_noME.R                <- removing measurement error and fixed effects
@@ -43,6 +44,7 @@ The issue was that the MRP estimate decreases (away from the crude value of 1.6%
 │   │   │   ├── sim2_spec                     <- testing p = 0.1, 0.5 
 │   │   │   └── sim3_noFE                     <- R2D2M2 and alt prior
 │   │   ├── func                              <- functions to help read in results and fixed seed numbers
+│   │   ├── reading_sim_res.R                 <- saving iteration results into results_sim_list.RData
 │   │   ├── sim1_noFE_noME                   
 │   │   │   ├── sim1_covariates_extra.R       <- rerunning iterations that failed on cluster
 │   │   │   ├── sim1_covariates.R             <- modeling covariates 
